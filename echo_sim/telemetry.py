@@ -81,6 +81,16 @@ class Telemetry:
                     pass
         return evt
 
+    def detach(self) -> None:
+        """Stop feeding subscribers, without closing the log file yet.
+
+        Cancelling a run still lets its `finally` block emit a run_end. Without
+        this, that event lands in the *next* run's dashboard and reports the
+        wrong numbers.
+        """
+        self._subscribers.clear()
+        self._queues.clear()
+
     def close(self) -> None:
         if self._fh is not None:
             self._fh.close()

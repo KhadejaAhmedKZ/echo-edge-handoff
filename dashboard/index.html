@@ -374,7 +374,7 @@ for (let i=0;i<14;i++){
 }
 
 // ---- camera control --------------------------------------------------------
-let follow = true, yaw = -0.30, pitch = 0.38, dist = 26.0;
+let follow = true, yaw = -0.26, pitch = 0.30, dist = 17.5;
 let dragging = false, lastX = 0, lastY = 0;
 canvas.addEventListener('pointerdown', e => {dragging = true; lastX = e.clientX; lastY = e.clientY;});
 addEventListener('pointerup', () => dragging = false);
@@ -400,7 +400,7 @@ const S = {
 };
 
 const camTarget = new THREE.Vector3();
-camera.position.set(xOf(0) - 20, 11.5, 3.2);   // start framed, not at the origin
+camera.position.set(xOf(0) - 15, 6.5, 1.6);   // start framed, not at the origin
 let phase = 0, clock = new THREE.Clock();
 
 function frame(){
@@ -481,7 +481,7 @@ function frame(){
   });
 
   // camera
-  camTarget.set(walker.position.x + 3.0, 1.7, -4.0);
+  camTarget.set(walker.position.x + 1.6, 1.5, -3.0);
   const cx = camTarget.x - Math.cos(yaw) * dist * Math.cos(pitch);
   const cz = camTarget.z - Math.sin(yaw) * dist * Math.cos(pitch);
   const cy = camTarget.y + dist * Math.sin(pitch);

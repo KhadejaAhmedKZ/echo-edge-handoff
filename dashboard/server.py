@@ -77,6 +77,10 @@ class Hub:
                            telemetry=tel, fail_edge_prepare=fail_edge))
 
     async def stop_run(self) -> None:
+        # Detach first: a cancelled run still emits its run_end, and that must
+        # not be broadcast into the next run's view.
+        if self.telemetry is not None:
+            self.telemetry.detach()
         if self.task is not None and not self.task.done():
             self.task.cancel()
             with contextlib.suppress(Exception):
