@@ -118,6 +118,11 @@ class DecisionEngine:
     def current_candidate(self, network_id: str, edge_id: str) -> Candidate:
         return self.score_pair(network_id, edge_id, self.intent.weights)
 
+    @property
+    def streak_view(self) -> dict:
+        """How close each challenger is to earning a handoff, for the dashboard."""
+        return {f"{e}/{n}": v for (n, e), v in self._streak.items() if v}
+
     # -- should we move? ---------------------------------------------------
 
     def evaluate(self, current_network: str, current_edge: str

@@ -258,13 +258,31 @@ session rebuild, twelve frames gone, and the largest spike at a crossing.
 
 ## Dashboard
 
-A third-person 3D view: you watch a person carrying a laptop walk the route
-while the four edge sites stand along it. The active link is drawn from the
-laptop to the serving edge with packets flowing along it; during a handoff a
-second beam reaches ahead to the edge being prepared. Around it: live health
-for all four networks (including the ones not in use), live CPU and inference
-cost for all four edges, the handoff state machine, and a plain-language line
-explaining every decision as it is made.
+A third-person 3D view in the EDGE palette - orange, white and gray on black.
+You watch a person carrying a laptop walk the route while the four edge sites
+stand along it. The active link is drawn from the laptop to the serving edge
+with packets flowing along it; during a handoff a second white beam reaches
+ahead to the edge being prepared.
+
+Around the scene, three things are readable at a glance:
+
+* **All four access networks**, each with its six tracked characteristics -
+  signal, latency, jitter, packet loss, bandwidth and availability - plus the
+  Predictor's verdict on where that link is heading. Networks nobody is using
+  are shown exactly as fully as the active one, because that is the point.
+* **All four edge sites** across the top: expected inference cost, CPU, and
+  active sessions, with the serving edge lit and the edge being prepared
+  outlined.
+* **The agent pipeline**, all eight at once, each showing what it currently
+  believes: how many links the Watcher is holding samples for, which link the
+  Predictor thinks fails next and when, what the Intent Agent thinks you are
+  doing, the Decision Engine's chosen pair with its score and its runner-up and
+  how close a challenger is to earning a switch, the Handoff state machine, the
+  Recovery Agent's backoff list, the Troubleshooter's root cause, and the
+  Explainer's sentence.
+
+Every value is read straight off the agent that produced it, so the dashboard
+cannot show a decision that differs from the one actually taken.
 
 The browser is fed the same event stream that the log file records, so what is
 on screen and what the numbers say cannot disagree. Finished runs can be

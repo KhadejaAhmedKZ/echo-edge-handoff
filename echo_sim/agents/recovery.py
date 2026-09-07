@@ -46,6 +46,9 @@ class RecoveryAgent:
     def is_blocked(self, edge_id: str) -> bool:
         return time.monotonic() < self.blocked_until.get(edge_id, 0.0)
 
+    def blocked_edges(self) -> list[str]:
+        return [eid for eid in self.blocked_until if self.is_blocked(eid)]
+
     def plan(self, failure: HandoffResult, current: Candidate) -> RecoveryPlan:
         self.recoveries += 1
         self.block(failure.target_edge)

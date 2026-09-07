@@ -37,7 +37,7 @@ NETWORKS: Dict[str, NetworkSpec] = {
     "wifi": NetworkSpec(
         id="wifi",
         label="Indoor Wi-Fi",
-        colour="#c4b5fd",
+        colour="#ffffff",
         best=(12.0, 2.0, 0.0005, 300.0),
         worst=(180.0, 35.0, 0.18, 8.0),
         coverage=[(0.00, 1.00), (0.18, 0.96), (0.30, 0.58),
@@ -46,7 +46,7 @@ NETWORKS: Dict[str, NetworkSpec] = {
     "cellular": NetworkSpec(
         id="cellular",
         label="Private 5G",
-        colour="#8b5cf6",
+        colour="#ff6b00",
         best=(22.0, 3.0, 0.0008, 200.0),
         worst=(120.0, 25.0, 0.08, 10.0),
         coverage=[(0.00, 0.42), (0.16, 0.68), (0.34, 0.95), (0.52, 0.88),
@@ -56,7 +56,7 @@ NETWORKS: Dict[str, NetworkSpec] = {
     "satellite": NetworkSpec(
         id="satellite",
         label="Satellite",
-        colour="#ff7a2f",
+        colour="#ffb27a",
         # Even at full quality satellite is slow: availability != suitability.
         best=(520.0, 25.0, 0.004, 60.0),
         worst=(780.0, 60.0, 0.04, 8.0),
@@ -66,7 +66,7 @@ NETWORKS: Dict[str, NetworkSpec] = {
     "wired": NetworkSpec(
         id="wired",
         label="Wired dock",
-        colour="#ede9fe",
+        colour="#8e8e96",
         best=(1.5, 0.2, 0.00001, 1000.0),
         worst=(6.0, 1.5, 0.001, 400.0),
         coverage=[(0.00, 0.00), (0.80, 0.00), (0.86, 0.92), (1.00, 1.00)],

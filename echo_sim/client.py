@@ -68,6 +68,9 @@ class EchoController:
         self.consecutive_failures = 0
         self.pinned_edge: Optional[str] = None      # quic-only mode stays here
         self.last_explanation = ""
+        self.last_diagnosis: Dict[str, Any] = {}
+        self.last_reason = ""
+        self.last_handoff_ms: Optional[float] = None
         self.running = False
         self._t0 = time.monotonic()
         self._sent_recent: List[float] = []
@@ -301,8 +304,11 @@ class EchoController:
         network_id, edge_id = self.current_pair()
         current, challenger, reason = self.decision.evaluate(network_id, edge_id)
 
+        self.last_reason = reason
+
         if challenger is None:
             diag = self.troubleshooter.diagnose(current)
+            self.last_diagnosis = diag
             self.telemetry.emit("diagnosis", **diag)
             if diag["cause"] == "healthy":
                 self._explain(self.explainer.why_stay(current, reason))
@@ -337,6 +343,7 @@ class EchoController:
         result = await self.handoff.execute(edge_id, challenger, self.state)
         self.metrics.mark_handoff_window(start, self.now())
 
+        self.last_handoff_ms = result.total_ms
         if result.ok:
             self.metrics.handoffs.append(result.as_dict())
             self.metrics.state_bytes += result.state_bytes
@@ -359,6 +366,71 @@ class EchoController:
 
     # -- dashboard feed ----------------------------------------------------
 
+    def _agents_snapshot(self) -> Dict[str, Any]:
+        """One line of live truth per agent, so the pipeline can be watched.
+
+        Everything here is read straight off the agents themselves rather than
+        recomputed for display, so the dashboard cannot show a decision that
+        differs from the one that was actually taken.
+        """
+        network_id, edge_id = self.current_pair()
+        trends: Dict[str, Any] = {}
+        for nid in self.watcher.latest_networks:
+            p = self.predictor.network(nid)
+            ttl = self.predictor.time_to_unusable_s(nid)
+            trends[nid] = {
+                "rtt_slope": round(p["rtt_ms_slope"], 2),
+                "quality_slope": round(p["quality_slope"], 4),
+                "loss_slope": round(p["loss_slope"], 5),
+                "predicted_rtt_ms": round(p["rtt_ms"], 1),
+                "predicted_quality": round(p["quality"], 3),
+                "degrading": self.predictor.degrading(nid),
+                "seconds_to_unusable": None if ttl == float("inf") else round(ttl, 1),
+            }
+
+        ranked = [c for c in self.decision.last_ranking if c.reachable][:3]
+        current = self.decision.current_candidate(network_id, edge_id)
+
+        return {
+            "watcher": {
+                "networks": len(self.watcher.latest_networks),
+                "edges": len(self.watcher.latest_edges),
+                "tick_ms": int(self.cfg.agent_tick_s * 1000),
+                "samples": sum(len(h["quality"]) for h in self.watcher.net_history.values()),
+            },
+            "predictor": {"horizon_s": self.cfg.prediction_horizon_s, "trends": trends},
+            "intent": {
+                "intent": self.intent.intent,
+                "description": self.intent.describe(),
+                "live": self.intent.is_live,
+                "preload_buffer_s": self.intent.preload_buffer_s,
+            },
+            "decision": {
+                "current": current.as_dict(),
+                "candidates": [c.as_dict() for c in ranked],
+                "reason": self.last_reason,
+                "margin_pct": round(self.cfg.switch_margin * 100),
+                "patience": self.cfg.switch_patience,
+                "streaks": self.decision.streak_view,
+            },
+            "handoff": {
+                "state": self.handoff.state,
+                "completed": len(self.metrics.handoffs),
+                "failed": self.metrics.failed_handoffs,
+                "last_ms": (round(self.last_handoff_ms, 1)
+                            if self.last_handoff_ms is not None else None),
+                "state_bytes": self.metrics.state_bytes,
+            },
+            "recovery": {
+                "recoveries": self.recovery.recoveries,
+                "blocked": self.recovery.blocked_edges(),
+            },
+            "troubleshooter": self.last_diagnosis or {"cause": "healthy",
+                                                      "headline": "nothing is wrong",
+                                                      "detail": ""},
+            "explainer": {"text": self.last_explanation},
+        }
+
     def _publish(self, t: float) -> None:
         network_id, edge_id = self.current_pair()
         ranking = self.decision.last_ranking[:6]
@@ -380,6 +452,7 @@ class EchoController:
             predicted_best=(self.decision.best().as_dict()
                             if self.decision.best() else None),
             explanation=self.last_explanation,
+            agents=self._agents_snapshot(),
             handoffs=len(self.metrics.handoffs),
             failed_handoffs=self.metrics.failed_handoffs,
             reconnects=self.metrics.reconnects,
