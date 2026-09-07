@@ -3,685 +3,1021 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="ECHO - proactive edge compute handoff over QUIC. Prototype report for the Advanced Technology Pioneers 2026 EDGE challenge.">
+<title>ECHO - Edge Compute Handoff Orchestration</title>
+<meta name="description" content="Live 3D replay of the ECHO prototype: an inspection robot crossing four network zones while its AI inference session migrates between four edge sites.">
 <meta property="og:title" content="ECHO - Edge Compute Handoff Orchestration">
-<meta property="og:description" content="Keeping a live AI inference session running, and fast, while both the network and the nearest edge change.">
-<meta property="og:type" content="article">
-<title>ECHO Edge Handoff</title>
+<meta property="og:description" content="Watch the robot cross four zones while the inference session moves with it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 :root{
-  --bg:#fbfaf8; --surface:#ffffff; --surface-2:#f4f1ed; --line:#e4dfd8; --line-2:#cfc8bf;
-  --ink:#17161a; --ink-2:#3d3a42; --muted:#6e6a72; --faint:#94909a;
-  --accent:#d95500; --accent-soft:#fbeade; --accent-line:#e8a67a;
-  --echo:#d95500; --quic:#3d3a42; --tcp:#a09a94;
-  --good:#2f7d55; --warn:#a8620a;
-  --shadow:0 1px 2px rgba(23,22,26,.05), 0 8px 24px -12px rgba(23,22,26,.18);
-  --display:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
-  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
-  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:#0b0b0d; --panel:#141417; --panel2:#1b1b1f; --raise:#232328;
+  --line:#2c2c32; --line2:#3a3a42;
+  --orange:#ff6b00; --orange-pale:#ffb27a;
+  --white:#ffffff; --text:#ececef; --muted:#8a8a93; --dim:#5c5c65;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
-:root:not([data-theme="light"]){}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#0b0b0d; --surface:#141417; --surface-2:#1b1b1f; --line:#2a2a30; --line-2:#3d3d45;
-    --ink:#eeecef; --ink-2:#c6c3c9; --muted:#918d97; --faint:#6a6670;
-    --accent:#ff7a1f; --accent-soft:#241505; --accent-line:#a8551f;
-    --echo:#ff7a1f; --quic:#d6d3d9; --tcp:#7c7680;
-    --good:#5fb98a; --warn:#e0a24a;
-    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0b0b0d; --surface:#141417; --surface-2:#1b1b1f; --line:#2a2a30; --line-2:#3d3d45;
-  --ink:#eeecef; --ink-2:#c6c3c9; --muted:#918d97; --faint:#6a6670;
-  --accent:#ff7a1f; --accent-soft:#241505; --accent-line:#a8551f;
-  --echo:#ff7a1f; --quic:#d6d3d9; --tcp:#7c7680;
-  --good:#5fb98a; --warn:#e0a24a;
-  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
-}
-
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--body);
-  font-size:16px;line-height:1.62;margin:0;
-  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-.shell{max-width:1080px;margin:0 auto;padding:0 28px 96px}
-.measure{max-width:68ch}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+canvas{display:block}
+#scene{position:fixed;inset:0;z-index:0}
+.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(115% 85% at 50% 12%,transparent 42%,rgba(11,11,13,.88) 100%)}
 
-/* ---------- masthead ---------- */
-header.top{padding:56px 0 30px;border-bottom:2px solid var(--ink);margin-bottom:0}
-.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--accent);font-weight:600;margin:0 0 16px}
-h1{font-family:var(--display);font-weight:700;font-size:clamp(46px,8vw,86px);line-height:.94;
-  letter-spacing:-.028em;margin:0 0 14px;text-wrap:balance}
-h1 .mark{color:var(--accent)}
-.standfirst{font-size:clamp(17px,2.1vw,20px);line-height:1.5;color:var(--ink-2);
-  max-width:60ch;margin:0 0 30px;font-weight:400}
-.metastrip{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);
-  border-left:1px solid var(--line)}
-.metastrip div{flex:1 1 150px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);
-  padding:11px 14px}
-.metastrip dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--faint);margin:0 0 3px}
-.metastrip dd{margin:0;font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500;
+/* ---------- layout: a strict grid, nothing floats over anything ---------- */
+.hud{position:fixed;inset:0;z-index:2;display:grid;
+  grid-template-columns:318px minmax(0,1fr) 392px;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  gap:12px;padding:12px;pointer-events:none}
+.hud > *{pointer-events:auto;min-height:0;min-width:0}
+.topbar{grid-column:1/4;grid-row:1}
+.left{grid-column:1;grid-row:2}
+.centre{grid-column:2;grid-row:2;pointer-events:none;display:flex;flex-direction:column;gap:12px}
+.right{grid-column:3;grid-row:2}
+.bottom{grid-column:1/4;grid-row:3;display:flex;gap:12px;align-items:stretch}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  display:flex;flex-direction:column;min-height:0;
+  box-shadow:0 10px 34px rgba(0,0,0,.5)}
+.panel > h3{margin:0;padding:9px 12px;font-size:10px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--muted);font-weight:600;
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex:none}
+.panel > h3 em{font-style:normal;color:var(--dim);letter-spacing:.04em;
+  text-transform:none;font-weight:400;font-size:10px;margin-left:auto}
+.body{padding:9px;display:flex;flex-direction:column;gap:7px;overflow-y:auto;min-height:0}
+.body::-webkit-scrollbar{width:6px}
+.body::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+.body::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- top bar ---------- */
+.topbar{display:flex;align-items:center;gap:14px;padding:9px 13px;flex-direction:row}
+.brand{display:flex;align-items:center;gap:10px;flex:none}
+.brand b{font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--white)}
+.brand .dash{width:22px;height:4px;background:var(--orange);border-radius:1px}
+.brand span{font-size:10px;color:var(--muted);letter-spacing:.09em;max-width:150px;line-height:1.25}
+.seg{display:flex;gap:2px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;padding:2px;flex:none}
+.seg button{background:none;border:0;color:var(--muted);font-family:var(--sans);
+  font-size:11.5px;font-weight:500;padding:7px 14px;border-radius:6px;cursor:pointer;
+  transition:.15s;white-space:nowrap}
+.seg button:hover{color:var(--text);background:var(--raise)}
+.seg button.on{background:var(--orange);color:#0b0b0d;font-weight:600}
+.btn{background:var(--panel2);border:1px solid var(--line2);color:var(--text);
+  font-family:var(--sans);font-size:11.5px;font-weight:500;padding:8px 15px;
+  border-radius:7px;cursor:pointer;transition:.15s;flex:none}
+.btn:hover{background:var(--raise);border-color:var(--muted)}
+.btn.primary{background:var(--orange);border-color:var(--orange);color:#0b0b0d;font-weight:600}
+.btn.primary:hover{background:#ff7d1f}
+.spacer{flex:1}
+.stat{display:flex;flex-direction:column;gap:1px;flex:none}
+.stat i{font-style:normal;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.stat b{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--white)}
+.stat b.hot{color:var(--orange)}
+.chip{font-family:var(--mono);font-size:10.5px;padding:6px 11px;border-radius:6px;
+  background:var(--panel2);border:1px solid var(--line2);color:var(--text);white-space:nowrap;flex:none}
+
+/* ---------- network cards ---------- */
+.net{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--nc);
+  border-radius:8px;padding:8px 9px;transition:.2s}
+.net.active{background:var(--raise);border-color:var(--line2);border-left-color:var(--orange);
+  box-shadow:inset 0 0 0 1px rgba(255,107,0,.22)}
+.net.down{opacity:.4}
+.nh{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.nh .nm{font-size:12.5px;font-weight:600;flex:1;color:var(--white)}
+.nh .badge{font-family:var(--mono);font-size:8px;letter-spacing:.1em;padding:3px 6px;
+  border-radius:4px;background:var(--raise);color:var(--muted);border:1px solid var(--line2)}
+.nh .badge.live{background:var(--orange);color:#0b0b0d;border-color:var(--orange);font-weight:700}
+.nh .badge.dead{background:transparent;color:var(--dim);border-style:dashed}
+
+.sig{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sig .track{flex:1;height:6px;border-radius:3px;background:#0e0e11;overflow:hidden;
+  border:1px solid var(--line)}
+.sig .track i{display:block;height:100%;background:var(--nc);transition:width .3s}
+.sig .pct{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--white);width:34px;text-align:right}
+.trend{font-family:var(--mono);font-size:8.5px;color:var(--dim);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.trend.bad{color:var(--orange)}
+.trend.good{color:var(--white)}
+
+.chars{display:flex;flex-direction:column;gap:4px}
+.ch{display:grid;grid-template-columns:54px 1fr 54px;align-items:center;gap:6px}
+.ch label{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.ch .track{height:4px;border-radius:2px;background:#0e0e11;overflow:hidden;border:1px solid var(--line)}
+.ch .track i{display:block;height:100%;transition:width .3s}
+.ch b{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--text);text-align:right}
+.fill-bad{background:var(--orange)}
+.fill-good{background:var(--white)}
+
+/* ---------- edge strip across the top of the scene ---------- */
+.edgestrip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;pointer-events:auto;flex:none}
+.edge{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+  transition:.2s;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.edge.active{border-color:var(--orange);background:#1d1409;
+  box-shadow:0 0 0 1px var(--orange),0 10px 30px rgba(255,107,0,.16)}
+.edge.target{border-color:var(--white);border-style:dashed;animation:blink 1.1s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.55}}
+.eh{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.eh .eid{font-family:var(--mono);font-size:12px;font-weight:700;width:19px;height:19px;
+  display:grid;place-items:center;border-radius:5px;background:var(--raise);color:var(--text);flex:none}
+.edge.active .eh .eid{background:var(--orange);color:#0b0b0d}
+.eh .en{font-size:11.5px;font-weight:600;color:var(--white);flex:1;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.eh .est{font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--dim)}
+.edge.active .eh .est{color:var(--orange)}
+.edge.target .eh .est{color:var(--white)}
+.emet{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.emet div{display:flex;flex-direction:column;gap:1px}
+.emet span{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.emet b{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--text)}
+
+/* ---------- agent pipeline ---------- */
+#agents{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
+.agent{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+  padding:6px 8px 7px;transition:.2s;min-width:0}
+.agent.on{background:var(--raise);border-color:var(--orange);
+  box-shadow:inset 0 0 0 1px rgba(255,107,0,.2)}
+.ah{display:flex;align-items:center;gap:5px;margin-bottom:2px}
+.ah .num{font-family:var(--mono);font-size:8.5px;font-weight:700;width:15px;height:15px;
+  display:grid;place-items:center;border-radius:4px;background:#0e0e11;
+  border:1px solid var(--line2);color:var(--muted);flex:none}
+.agent.on .ah .num{background:var(--orange);color:#0b0b0d;border-color:var(--orange)}
+.ah .an{font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--white);flex:1}
+.ah .pulse{width:5px;height:5px;border-radius:50%;background:var(--dim);flex:none}
+.agent.on .ah .pulse{background:var(--orange);box-shadow:0 0 8px var(--orange);
+  animation:beat 1.3s ease-in-out infinite}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.35}}
+.aq{font-size:7.5px;color:var(--dim);margin-bottom:3px;line-height:1.2;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.av{font-family:var(--mono);font-size:8.5px;line-height:1.38;color:var(--text);
   word-break:break-word}
-.metastrip dd a{color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor}
+.av .k{color:var(--orange)}
+.av .g{color:var(--muted)}
 
-/* ---------- sections ---------- */
-section{padding-top:56px}
-h2{font-family:var(--display);font-weight:600;font-size:clamp(25px,3.4vw,34px);line-height:1.14;
-  letter-spacing:-.018em;margin:0 0 6px;text-wrap:balance}
-.kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--faint);font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:9px}
-.kicker::after{content:"";height:1px;background:var(--line);flex:1}
-h3{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.008em;
-  margin:34px 0 8px}
-p{margin:0 0 16px}
-p.lede{font-size:17.5px;color:var(--ink-2);max-width:62ch}
-a{color:var(--accent)}
-strong{font-weight:600;color:var(--ink)}
-code,.m{font-family:var(--mono);font-size:.88em;background:var(--surface-2);
-  padding:1px 5px;border-radius:3px;border:1px solid var(--line)}
-ul{margin:0 0 16px;padding-left:0;list-style:none}
-ul li{position:relative;padding-left:20px;margin-bottom:9px;max-width:68ch}
-ul li::before{content:"";position:absolute;left:2px;top:.66em;width:6px;height:1.5px;
-  background:var(--accent-line,var(--line-2))}
 
-/* ---------- equation ---------- */
-.equation{font-family:var(--mono);font-size:14px;line-height:1.9;background:var(--surface);
-  border:1px solid var(--line);border-left:3px solid var(--accent);padding:18px 22px;
-  margin:0 0 18px;overflow-x:auto;color:var(--ink-2)}
-.equation b{color:var(--accent);font-weight:600}
+/* ---------- log ---------- */
+.log{flex:none;max-height:170px}
+.ev{font-family:var(--mono);font-size:9.5px;line-height:1.45;color:var(--muted);
+  display:flex;gap:7px;padding-bottom:4px;border-bottom:1px solid #1a1a1e}
+.ev b{color:var(--white);font-weight:600;flex:none}
+.ev.hi b{color:var(--orange)}
+.ev.hi span{color:var(--text)}
 
-/* ---------- tables ---------- */
-.tablewrap{overflow-x:auto;margin:0 0 8px;border:1px solid var(--line);background:var(--surface);
-  box-shadow:var(--shadow)}
-table{border-collapse:collapse;width:100%;font-size:13.5px}
-th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
-thead th{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--faint);font-weight:600;background:var(--surface-2);white-space:nowrap;
-  border-bottom:1px solid var(--line-2)}
-tbody tr:last-child td{border-bottom:0}
-td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
-  white-space:nowrap}
-td.name{font-family:var(--mono);font-size:12.5px;color:var(--ink);white-space:nowrap}
-.win{color:var(--accent);font-weight:600}
-caption{caption-side:bottom;text-align:left;font-size:12.5px;color:var(--muted);
-  padding:10px 2px 0;line-height:1.5}
-
-/* ---------- agents ---------- */
-.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:1px;
-  background:var(--line);border:1px solid var(--line);margin-bottom:8px}
-.agent{background:var(--surface);padding:14px 16px 16px}
-.agent .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.1em}
-.agent h4{font-family:var(--display);font-size:15px;font-weight:600;margin:2px 0 6px;
-  letter-spacing:-.005em}
-.agent p{font-size:13.5px;line-height:1.5;color:var(--ink-2);margin:0}
-.agent.built h4::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;
-  background:var(--accent);margin-left:7px;vertical-align:middle}
-.agent.planned{background:var(--surface-2)}
-.agent.planned h4{color:var(--muted)}
-.agent.planned p{color:var(--muted)}
-
-/* ---------- sequence ---------- */
-.seq{border:1px solid var(--line);background:var(--surface);margin-bottom:8px}
-.seq li{display:grid;grid-template-columns:34px 122px 1fr;gap:0 14px;padding:11px 16px;
-  border-bottom:1px solid var(--line);margin:0;max-width:none}
-.seq li::before{display:none}
-.seq li:last-child{border-bottom:0}
-.seq .step{font-family:var(--mono);font-size:11px;color:var(--faint);padding-top:2px}
-.seq .msg{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--accent);
-  padding-top:1px}
-.seq .what{font-size:13.5px;line-height:1.5;color:var(--ink-2)}
-
-/* ---------- charts ---------- */
-figure{margin:0 0 8px}
-figcaption{font-size:12.5px;color:var(--muted);line-height:1.5;padding-top:10px;max-width:70ch}
-.panelgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:1px;
-  background:var(--line);border:1px solid var(--line)}
-.panel{background:var(--surface);padding:15px 16px 17px}
-.panel .ptitle{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
-  color:var(--faint);font-weight:600;margin-bottom:14px;line-height:1.4}
-.bars{display:flex;flex-direction:column;gap:11px}
-.barrow{display:grid;grid-template-columns:1fr;gap:4px}
-.barlab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
-  font-size:11.5px;color:var(--muted)}
-.barlab b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;
-  font-weight:600;color:var(--ink)}
-.bartrack{height:9px;background:var(--surface-2);border:1px solid var(--line);position:relative}
-.barfill{height:100%;display:block}
-.barfill.echo{background:var(--echo)}
-.barfill.quic{background:var(--quic)}
-.barfill.tcp{background:var(--tcp)}
-.barrow.is-echo .barlab b{color:var(--accent)}
-
-.tl{background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
-.tlrow{border-bottom:1px solid var(--line);padding:12px 16px 6px;position:relative}
-.tlrow:last-child{border-bottom:0}
-.tlhead{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap}
-.tlname{font-family:var(--display);font-size:14px;font-weight:600}
-.tlmeta{font-family:var(--mono);font-size:11px;color:var(--muted);
-  font-variant-numeric:tabular-nums}
-.tl svg{display:block;width:100%;height:auto}
-.tlaxis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
-  color:var(--faint);padding:2px 16px 10px;font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--muted);
-  padding:11px 16px;border-top:1px solid var(--line);background:var(--surface-2)}
-.legend span{display:flex;align-items:center;gap:7px}
-.swatch{width:14px;height:3px;display:inline-block}
-.swatch.band{height:11px;width:11px;background:var(--accent);opacity:.13;
-  outline:1px solid var(--accent);outline-offset:-1px}
-.swatch.tick{height:11px;width:2px;background:var(--warn)}
-
-/* ---------- callouts ---------- */
-.note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--surface);
-  padding:18px 22px;margin:0 0 18px}
-.note h4{font-family:var(--display);font-size:15px;font-weight:600;margin:0 0 8px}
-.note p:last-child{margin-bottom:0}
-.note.caution{border-left-color:var(--warn)}
-
-.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1px;
-  background:var(--line);border:1px solid var(--line);margin-bottom:8px}
-.split > div{background:var(--surface);padding:16px 18px 18px}
-.split h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
-  margin:0 0 10px;color:var(--faint);font-weight:600}
-.split p{font-size:13.5px;line-height:1.55;margin:0 0 10px;color:var(--ink-2)}
-.split p:last-child{margin:0}
-
-pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:var(--surface);
-  border:1px solid var(--line);padding:15px 18px;overflow-x:auto;margin:0 0 8px;
-  color:var(--ink-2)}
-pre .c{color:var(--faint)}
-
-figure.diagram{background:var(--surface);border:1px solid var(--line);padding:22px 18px 6px;
-  box-shadow:var(--shadow)}
-figure.diagram svg{display:block;width:100%;height:auto;max-width:840px;margin:0 auto;
-  color:var(--ink-2)}
-figure.diagram figcaption{padding:14px 4px 12px;margin:0 auto;max-width:840px}
-
-footer{margin-top:64px;padding-top:22px;border-top:2px solid var(--ink);
-  font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;
-  flex-wrap:wrap;gap:12px}
-footer .mono{font-family:var(--mono);font-size:11.5px}
-
-@media (max-width:640px){
-  .shell{padding:0 18px 64px}
-  .seq li{grid-template-columns:1fr;gap:3px}
-  .seq .step{display:none}
-}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* ---------- bottom ---------- */
+.why{flex:1;padding:11px 14px;gap:8px;min-width:0}
+.why .lbl{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.why .txt{font-size:14px;line-height:1.45;color:var(--white);font-weight:500}
+.pipeline{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.step{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;padding:4px 9px;border-radius:4px;
+  background:var(--panel2);color:var(--dim);border:1px solid var(--line);transition:.2s}
+.step.done{color:var(--muted);border-color:var(--line2)}
+.step.on{background:var(--orange);color:#0b0b0d;border-color:var(--orange);font-weight:700}
+.metrics{width:326px;flex:none;padding:10px 12px}
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mgrid div{display:flex;flex-direction:column;gap:1px}
+.mgrid span{font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.mgrid b{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--white)}
+#spark{width:100%;height:40px;margin-top:9px;display:block}
+.hint{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);z-index:3;font-size:9px;
+  color:var(--dim);letter-spacing:.07em;pointer-events:none}
+@media (max-width:1440px){.hud{grid-template-columns:282px minmax(0,1fr) 344px}.metrics{width:282px}}
+.hud{padding-bottom:48px!important}
+.recbanner{position:fixed;left:0;right:0;bottom:0;z-index:5;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;
+  background:var(--panel);border-top:1px solid var(--line);
+  padding:9px 16px;font-size:11px;color:var(--muted);height:40px}
+.recbanner b{color:var(--white);font-weight:600}
+.recbanner .dot{width:6px;height:6px;border-radius:50%;background:var(--orange);flex:none;
+  box-shadow:0 0 8px var(--orange)}
+.recbanner a{color:var(--orange);text-decoration:none;border-bottom:1px solid currentColor}
+.recbanner a:hover{color:var(--white);border-color:var(--white)}
+.recbanner .tip{margin-left:auto;color:var(--dim)}
+@media (max-width:1100px){.recbanner .blurb{display:none}}
+@media (max-width:820px){.recbanner .tip{display:none}}
 </style>
 </head>
 <body>
+<canvas id="scene"></canvas>
+<div class="vignette"></div>
 
-
-<div class="shell">
-
-<header class="top">
-  <p class="eyebrow">Prototype report &middot; Advanced Technology Pioneers 2026 &middot; EDGE challenge</p>
-  <h1>ECHO<span class="mark">.</span></h1>
-  <p class="standfirst">Keeping a live AI inference session running &mdash; and fast &mdash; while
-    both the network underneath it and the nearest compute location change.</p>
-  <dl class="metastrip">
-    <div><dt>Repository</dt><dd><a href="https://github.com/KhadejaAhmedKZ/echo-edge-handoff">echo&#8209;edge&#8209;handoff</a></dd></div>
-    <div><dt>Status</dt><dd>Working prototype</dd></div>
-    <div><dt>Code</dt><dd>3,877 lines Python</dd></div>
-    <div><dt>Tests</dt><dd>22 passing</dd></div>
-    <div><dt>Transport</dt><dd>aioquic 1.3.0</dd></div>
-    <div><dt>Agents</dt><dd>9 built, 5 planned</dd></div>
-  </dl>
-</header>
-
-<section>
-  <p class="kicker">The problem</p>
-  <h2>&ldquo;The connection stayed alive&rdquo; is not the success criterion</h2>
-  <div class="measure">
-    <p class="lede">An inspection robot moving through a site is surrounded by several networks at
-      once: indoor Wi&#8209;Fi, private 5G, satellite, a wired dock. Today it uses one, waits for it
-      to break, and only then looks for another. By then the frame is late and the operator is
-      looking at the past.</p>
-    <p>Fixing the transport is not enough, and this is the part that is easy to miss. QUIC can
-      already carry a connection across a network change without dropping it. But if the compute
-      you are talking to is still the box you started with, you are now reaching a distant server
-      over a worse path. Nothing looks broken. Everything is slower.</p>
-    <p>What the operator actually feels is not one number but four, and every one of them moves
-      when the robot moves:</p>
-  </div>
-  <div class="equation">
-    end&#8209;to&#8209;end&nbsp;=&nbsp;<b>network round trip</b>&nbsp;+&nbsp;<b>queueing</b>&nbsp;+&nbsp;<b>inference time</b>&nbsp;+&nbsp;<b>response transit</b>
-  </div>
-  <div class="measure">
-    <p>So ECHO watches all four networks <em>and</em> all four edge sites continuously, predicts
-      which pair is about to be best, and migrates the live inference session there
-      <strong>before</strong> the current path degrades &mdash; with the old edge still serving
-      until the new one has proved it works.</p>
-  </div>
-</section>
-
-<section>
-  <p class="kicker">How it fits together</p>
-  <h2>One robot, four networks, four places to compute</h2>
-  <figure class="diagram">
-    <svg viewBox="0 0 840 330" role="img" aria-label="The robot's frames pass through a per-network impairment relay to one of four edge sites. The agent loop reads all four networks and all four edges, and drives the handoff that moves the session between edges.">
-      <defs>
-        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
-        </marker>
-        <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <polygon points="0,1 9,5 0,9" fill="#d95500"></polygon>
-        </marker>
-      </defs>
-
-      <!-- robot -->
-      <rect x="8" y="128" width="112" height="62" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
-      <text x="64" y="152" text-anchor="middle" font-family="Archivo,sans-serif" font-size="13" font-weight="600" fill="currentColor">ROBOT-01</text>
-      <text x="64" y="170" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity=".7">20 frames/s</text>
-
-      <!-- relay -->
-      <rect x="176" y="112" width="128" height="94" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"></rect>
-      <text x="240" y="136" text-anchor="middle" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">impairment relay</text>
-      <text x="240" y="154" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">delay · jitter</text>
-      <text x="240" y="168" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">loss · bandwidth</text>
-      <text x="240" y="190" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".55">per source port</text>
-
-      <line x1="120" y1="159" x2="172" y2="159" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"></line>
-      <text x="146" y="150" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">QUIC</text>
-
-      <!-- edges -->
-      <g font-family="IBM Plex Mono,monospace" font-size="10">
-        <rect x="392" y="26" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
-        <text x="404" y="46" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">Edge A</text>
-        <text x="404" y="62" fill="currentColor" opacity=".7">indoor Wi-Fi · 26 ms</text>
-
-        <rect x="392" y="94" width="150" height="46" fill="none" stroke="#d95500" stroke-width="2"></rect>
-        <text x="404" y="114" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="#d95500">Edge B</text>
-        <text x="404" y="130" fill="currentColor" opacity=".7">private 5G · 21 ms</text>
-
-        <rect x="392" y="162" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5"></rect>
-        <text x="404" y="182" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor" opacity=".6">Edge C</text>
-        <text x="404" y="198" fill="currentColor" opacity=".45">satellite · 15 ms</text>
-
-        <rect x="392" y="230" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
-        <text x="404" y="250" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">Edge D</text>
-        <text x="404" y="266" fill="currentColor" opacity=".7">wired dock · 12 ms</text>
-      </g>
-
-      <line x1="304" y1="152" x2="388" y2="52" stroke="currentColor" stroke-width="1.2" opacity=".5" marker-end="url(#ar)"></line>
-      <line x1="304" y1="159" x2="388" y2="117" stroke="#d95500" stroke-width="2" marker-end="url(#ar-a)"></line>
-      <line x1="304" y1="166" x2="388" y2="185" stroke="currentColor" stroke-width="1.2" opacity=".3" marker-end="url(#ar)"></line>
-      <line x1="304" y1="173" x2="388" y2="253" stroke="currentColor" stroke-width="1.2" opacity=".5" marker-end="url(#ar)"></line>
-      <text x="352" y="106" font-family="IBM Plex Mono,monospace" font-size="9" fill="#d95500" font-weight="600">serving</text>
-
-      <!-- handoff arrow between edges -->
-      <path d="M 556 117 C 596 117 596 49 556 49" fill="none" stroke="#d95500" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ar-a)"></path>
-      <text x="612" y="86" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="#d95500" font-weight="600">session</text>
-      <text x="612" y="99" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="#d95500" font-weight="600">migrates</text>
-
-      <!-- agent loop -->
-      <rect x="176" y="248" width="366" height="58" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
-      <text x="192" y="270" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">agent loop</text>
-      <text x="192" y="288" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">watch · predict · decide · orchestrate &#8212; every 250 ms</text>
-
-      <line x1="240" y1="244" x2="240" y2="210" stroke="currentColor" stroke-width="1.2" opacity=".8" marker-end="url(#ar)"></line>
-      <text x="150" y="232" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">reads all 4 links</text>
-      <line x1="466" y1="244" x2="466" y2="282" stroke="currentColor" stroke-width="1.2" opacity="0"></line>
-      <line x1="500" y1="248" x2="500" y2="212" stroke="currentColor" stroke-width="1.2" opacity=".8" marker-end="url(#ar)"></line>
-      <text x="556" y="232" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">reads all 4 edges</text>
-    </svg>
-    <figcaption>Every frame crosses an impairment relay that applies the current conditions of
-      whichever access network the robot is attached to. The agent loop samples all four links and
-      all four edges &mdash; including the ones nobody is using &mdash; and it is the only thing
-      that can move the session from one edge to another. Edge C is drawn faded because ECHO never
-      selected it: satellite is always available and still the wrong answer.</figcaption>
-  </figure>
-</section>
-
-<section>
-  <p class="kicker">The agents</p>
-  <h2>Nine agents, each answering a different question</h2>
-  <p class="lede measure">Splitting these apart is not decoration. &ldquo;Which pair is best?&rdquo;
-    and &ldquo;should we move right now?&rdquo; are genuinely different questions, and conflating
-    them is how a system ends up thrashing on a correct ranking at the wrong moment.</p>
-  <div class="agents">
-    <div class="agent built"><p class="n">01</p><h4>Watcher</h4><p>What does every network and every edge look like right now &mdash; including the ones nobody is using? You cannot switch to a link you were not already watching.</p></div>
-    <div class="agent built"><p class="n">02</p><h4>Predictor</h4><p>Where is each one heading? EWMA level plus a least-squares slope over a 10&nbsp;s window, extrapolated 2&nbsp;s ahead.</p></div>
-    <div class="agent built"><p class="n">03</p><h4>Intent</h4><p>What is the robot doing? A call wants steadiness, a download wants throughput, live inference wants the lowest total time. Each gets a different weight vector.</p></div>
-    <div class="agent built"><p class="n">04</p><h4>Decision</h4><p>Which <em>(network, edge)</em> pair has the lowest predicted end&#8209;to&#8209;end cost? Scores all 16 pairs, with hysteresis so it does not oscillate.</p></div>
-    <div class="agent built"><p class="n">05</p><h4>Orchestrator</h4><p>Act on that now, or hold? Enforces one move at a time, a 3&nbsp;s cooldown, and Recovery's backoff &mdash; then picks the cheapest action that achieves the goal.</p></div>
-    <div class="agent built"><p class="n">06</p><h4>Handoff</h4><p>Runs the six&#8209;message sequence, early and reversibly. Nothing is discarded until the target acknowledges.</p></div>
-    <div class="agent built"><p class="n">07</p><h4>Recovery</h4><p>The handoff failed &mdash; stay, retry elsewhere, or cold&#8209;start? Backs off the edge that failed so it does not get an immediate second try.</p></div>
-    <div class="agent built"><p class="n">08</p><h4>Troubleshooter</h4><p>It feels bad and nothing switched. Why? Separates congestion, coverage, instability, loss, edge load and simply being compute&#8209;bound.</p></div>
-    <div class="agent built"><p class="n">09</p><h4>Explainer</h4><p>Says it in one sentence, generated from the same numbers the decision used, so the explanation cannot drift from the reason.</p></div>
-    <div class="agent planned"><p class="n">&mdash;</p><h4>Cost</h4><p>Planned. Avoid a metered link when a free one is comparable.</p></div>
-    <div class="agent planned"><p class="n">&mdash;</p><h4>Security</h4><p>Planned. Avoid untrusted networks such as open public Wi&#8209;Fi.</p></div>
-    <div class="agent planned"><p class="n">&mdash;</p><h4>Energy</h4><p>Planned. Balance battery against continuously probing four links.</p></div>
-    <div class="agent planned"><p class="n">&mdash;</p><h4>Policy</h4><p>Planned. Fixed rules, e.g. calls always get the most reliable option.</p></div>
-    <div class="agent planned"><p class="n">&mdash;</p><h4>Learning</h4><p>Planned. Remember that a link reliably degrades at a given time and prepare ahead of it.</p></div>
-  </div>
-  <p class="measure" style="margin-top:18px">The scoring function is over the <em>pair</em>, never the
-    network alone, and over <em>predicted</em> state rather than current:</p>
-  <div class="equation">
-score = w&#8321;&middot;predicted_path_rtt + w&#8322;&middot;predicted_jitter + w&#8323;&middot;predicted_loss<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ w&#8324;&middot;predicted_inference_ms + w&#8325;&middot;edge_load + w&#8326;&middot;proximity_cost
-  </div>
-  <p class="measure">The weights come from the Intent Agent. A challenger must beat the incumbent by
-    <strong>12%</strong> for <strong>3 consecutive ticks</strong> before a handoff is authorised
-    &mdash; unless the current path is already unreachable, in which case hysteresis is skipped.</p>
-</section>
-
-<section>
-  <p class="kicker">The protocol</p>
-  <h2>What actually crosses during a handoff</h2>
-  <p class="lede measure">The model is already resident on every edge. Only the live session
-    travels, which is why a handoff costs milliseconds instead of a model download.</p>
-  <ol class="seq">
-    <li><span class="step">01</span><span class="msg">PREPARE</span><span class="what">Target allocates resources for the session. No model transfer &mdash; it is already there.</span></li>
-    <li><span class="step">02</span><span class="msg">STATE</span><span class="what">Session id, model id and version, last processed frame, state version, and the object&#8209;tracking state cross the wire. Roughly 300 bytes.</span></li>
-    <li><span class="step">03</span><span class="msg">READY</span><span class="what">Target confirms it reconstructed the session. Because state arrived, it carries no cold&#8209;start penalty.</span></li>
-    <li><span class="step">04</span><span class="msg">VERIFY</span><span class="what">Target infers one duplicate frame. A broken target is caught <em>before</em> commit, while the old edge is still serving.</span></li>
-    <li><span class="step">05</span><span class="msg">COMMIT</span><span class="what">Target becomes the active inference server. Only now does the client stop sending to the old edge.</span></li>
-    <li><span class="step">06</span><span class="msg">DRAIN</span><span class="what">Old edge finishes outstanding work and accepts no more. Its connection is closed on a delay so in&#8209;flight frames still land.</span></li>
-  </ol>
-  <p class="measure" style="margin-top:20px">Two properties make this safe rather than merely fast.
-    It <strong>starts early</strong>, triggered by the Predictor's trend rather than by a failure.
-    And <strong>nothing is discarded until the target acknowledges</strong>, so a failed handoff
-    costs one wasted attempt and the session never leaves the old edge.</p>
-
-  <h3>Measured phase timings, all four handoffs</h3>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Move</th><th>Over</th><th class="num">Prepare</th><th class="num">State</th><th class="num">Verify</th><th class="num">Commit</th><th class="num">Total</th><th class="num">State size</th></tr></thead>
-      <tbody>
-        <tr><td class="name">A &rarr; B</td><td class="name">private 5G</td><td class="num">373.4</td><td class="num">97.5</td><td class="num">86.1</td><td class="num">56.6</td><td class="num">614.2</td><td class="num">300 B</td></tr>
-        <tr><td class="name">B &rarr; A</td><td class="name">indoor Wi&#8209;Fi</td><td class="num">139.5</td><td class="num">15.5</td><td class="num">45.5</td><td class="num">19.5</td><td class="num">220.6</td><td class="num">301 B</td></tr>
-        <tr><td class="name">A &rarr; B</td><td class="name">private 5G</td><td class="num">246.5</td><td class="num">31.9</td><td class="num">51.4</td><td class="num">24.1</td><td class="num">354.2</td><td class="num">302 B</td></tr>
-        <tr><td class="name">B &rarr; D</td><td class="name">wired dock</td><td class="num">39.4</td><td class="num">10.5</td><td class="num">19.9</td><td class="num">6.7</td><td class="num">76.8</td><td class="num">303 B</td></tr>
-      </tbody>
-    </table>
-    <caption>All values in milliseconds. <strong>Prepare dominates</strong> because it includes
-      opening a standby QUIC connection to the target over an impaired link &mdash; which is
-      precisely why it is done ahead of time, while the old edge is still serving. The whole
-      experiment moved <strong>1,206 bytes</strong> of session state in total.</caption>
-  </div>
-</section>
-
-<section>
-  <p class="kicker">Method</p>
-  <h2>What is held identical across the three experiments</h2>
-  <p class="lede measure">The only thing that varies between the three runs is the client's decision
-    logic &mdash; one branch in <code>client.py</code>. Everything else is the same code path.</p>
-  <div class="split">
-    <div>
-      <h4>Held constant</h4>
-      <p>Same route and timing, same four network profiles, same random seed, same 90&nbsp;s
-        duration, same 20&nbsp;fps workload, same four edge servers, same simulated inference cost,
-        same measurement code.</p>
-      <p>The zone&#8209;crossing windows used for scoring are fixed positions on the route, identical
-        for every mode, so a mode cannot improve its score by declaring fewer transitions.</p>
+<div class="hud">
+  <div class="panel topbar">
+    <div class="brand"><b>ECHO</b><i class="dash"></i><span>EDGE COMPUTE HANDOFF ORCHESTRATION</span></div>
+    <div class="seg" id="modes">
+      <button data-mode="tcp">TCP baseline</button>
+      <button data-mode="quic">QUIC only</button>
+      <button data-mode="echo" class="on">QUIC + ECHO</button>
     </div>
-    <div>
-      <h4>What varies</h4>
-      <p><strong>TCP.</strong> No migration, no prediction. React after the break, reconnect,
-        rebuild the session from nothing.</p>
-      <p><strong>QUIC only.</strong> The connection survives a network change, but the compute never
-        moves. The interesting baseline, because nothing looks broken.</p>
-      <p><strong>QUIC + ECHO.</strong> The full agent stack.</p>
+    <button class="btn primary" id="start">Play</button>
+    <button class="btn" id="stop">Stop</button>
+    <button class="btn" id="replay">Replay</button>
+    <div class="spacer"></div>
+    <div class="stat"><i>elapsed</i><b id="t">0.0s</b></div>
+    <div class="stat"><i>end-to-end</i><b id="e2e" class="hot">-</b></div>
+    <div class="chip" id="zone">standing by</div>
+  </div>
+
+  <div class="col left">
+    <div class="panel" style="flex:1">
+      <h3>Access networks <em>all four watched, always</em></h3>
+      <div class="body" id="nets"></div>
     </div>
   </div>
-</section>
 
-<section>
-  <p class="kicker">Results</p>
-  <h2>90 seconds, 1,799 frames, one seed</h2>
-
-  <div class="panelgrid" id="panels"></div>
-  <p style="font-size:12.5px;color:var(--muted);padding-top:10px;max-width:70ch;line-height:1.5">
-    Four measures, four scales &mdash; each panel is drawn against its own maximum, so bar lengths
-    are comparable within a panel and not across them. Lower is better in all four.</p>
-
-  <h3>Where the latency actually went</h3>
-  <figure>
-    <div class="tl" id="timeline"></div>
-    <figcaption>95th&#8209;percentile end&#8209;to&#8209;end inference latency per 0.75&nbsp;s bucket,
-      all three drawn on the same 0&ndash;950&nbsp;ms scale. Shaded bands are the fixed
-      zone&#8209;crossing windows; ticks below the axis mark lost frames. TCP's single reconnect at
-      44.6&nbsp;s is the visible cliff; QUIC&#8209;only's spike at the first crossing is its
-      migration landing while it is still talking to a distant Edge&nbsp;A.</figcaption>
-  </figure>
-
-  <h3>The full table</h3>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Measure</th><th class="num">TCP baseline</th><th class="num">QUIC only</th><th class="num">QUIC + ECHO</th></tr></thead>
-      <tbody>
-        <tr><td>p95 end-to-end latency</td><td class="num">510.6 ms</td><td class="num">186.2 ms</td><td class="num win">134.5 ms</td></tr>
-        <tr><td>Median latency</td><td class="num">200.3 ms</td><td class="num">102.5 ms</td><td class="num win">62.1 ms</td></tr>
-        <tr><td>p99 latency</td><td class="num">594.6 ms</td><td class="num">373.0 ms</td><td class="num win">165.4 ms</td></tr>
-        <tr><td>Worst single frame</td><td class="num">672.0 ms</td><td class="num">979.7 ms</td><td class="num win">343.2 ms</td></tr>
-        <tr><td>Frames lost</td><td class="num">11</td><td class="num">0</td><td class="num win">0</td></tr>
-        <tr><td>Longest gap with no result</td><td class="num">220.2 ms</td><td class="num">803.4 ms</td><td class="num win">159.7 ms</td></tr>
-        <tr><td>Time on a suboptimal edge</td><td class="num">44.5 s</td><td class="num">70.8 s</td><td class="num win">6.8 s</td></tr>
-        <tr><td>Reconnects</td><td class="num">1</td><td class="num">0</td><td class="num win">0</td></tr>
-        <tr><td>Successful handoffs</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num win">4</td></tr>
-        <tr><td>Failed handoffs</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num win">0</td></tr>
-        <tr><td>Inference latency gap</td><td class="num">38.9 ms</td><td class="num">40.0 ms</td><td class="num win">14.8 ms</td></tr>
-      </tbody>
-    </table>
-    <caption>Inference latency gap = p95 while crossing zones &minus; p95 while settled.
-      Seed 7. Full per&#8209;frame data is in <code>results/</code> in the repository.</caption>
+  <div class="centre">
+    <div class="edgestrip" id="edges"></div>
+    <div style="flex:1"></div>
   </div>
 
-  <div class="note" style="margin-top:26px">
-    <h4>Reading this honestly</h4>
-    <p><strong>This is one run at one seed.</strong> Most columns are stable across seeds. One is
-      not: QUIC&#8209;only's inference latency gap has measured anywhere from 3&nbsp;ms to 40&nbsp;ms
-      across runs, because it depends on exactly when its migration lands relative to a crossing
-      window. A judge who re-runs this with a different seed will see a different number there, and
-      that is expected.</p>
-    <p>When that figure comes out low, it is not QUIC&#8209;only doing well. It is QUIC&#8209;only
-      being <em>uniformly</em> worse: holding a connection to an edge it should have left, so its
-      settled latency is already high and a zone crossing barely moves it. Measured against itself
-      it looks stable. Measured against what the robot should have been getting, it spends
-      <strong>71 of 90 seconds on the wrong edge</strong>.</p>
-    <p>So the gap metric is not the argument on its own &mdash; it is only meaningful beside the
-      absolute numbers. ECHO has the lowest p95, the lowest median, the lowest p99, the shortest
-      freeze, no losses and no reconnects, and 6.8&nbsp;s on a suboptimal edge instead of 71
-      &mdash; while performing four live session migrations.</p>
-  </div>
-</section>
-
-<section>
-  <p class="kicker">Credibility</p>
-  <h2>What is real, what is emulated, what is simulated</h2>
-  <p class="lede measure">Stated plainly, because it is the first thing a judge should ask, and
-    because a prototype that overstates itself is worth less than one that does not.</p>
-  <div class="split">
-    <div>
-      <h4>Real</h4>
-      <p>The QUIC stack (<code>aioquic</code>), the TLS handshake, and connection migration across a
-        genuinely different four&#8209;tuple &mdash; same connection ID, server&#8209;side path
-        validation, no new handshake.</p>
-      <p>All four edge sites as independent services speaking the full ECHO message set over both
-        QUIC and TCP. Real UDP and TCP sockets. Every latency figure measured end&#8209;to&#8209;end
-        from the client, not modelled.</p>
+  <div class="col right">
+    <div class="panel" style="flex:1">
+      <h3>Agent pipeline <em id="tick">every 250 ms</em></h3>
+      <div class="body" id="agents"></div>
     </div>
-    <div>
-      <h4>Emulated</h4>
-      <p>The link conditions. Delay, jitter, loss and bandwidth are applied by relays sitting
-        between client and edge, driven by a coverage model &mdash; which is what
-        <code>tc</code>/<code>netem</code> does, moved into userspace so the whole thing runs on one
-        laptop of any OS.</p>
-      <p>The relay identifies which network a packet belongs to by the client's source port, which
-        is also what makes migration observable. On Linux the same numbers can drive real
-        <code>tc</code> qdiscs across namespaces; nothing else changes.</p>
-    </div>
-    <div>
-      <h4>Simulated</h4>
-      <p>The inference itself &mdash; a controlled delay that responds to edge load and to whether
-        the session was warm&#8209;started from transferred state or rebuilt cold.</p>
-      <p>What this project measures is end&#8209;to&#8209;end inference latency and session
-        continuity across a handoff, not the accuracy of a detector. Swapping in a real YOLO forward
-        pass means replacing one method, <code>EdgeService._infer</code>, and nothing else.</p>
+    <div class="panel log">
+      <h3>Decision log</h3>
+      <div class="body" id="log" style="gap:5px"></div>
     </div>
   </div>
-</section>
 
-<section>
-  <p class="kicker">Limitations</p>
-  <h2>What I would fix next, and why</h2>
-
-  <div class="note caution">
-    <h4>Two of the four handoffs were probably unnecessary</h4>
-    <p>The session moved A&rarr;B at 2.1&nbsp;s, back B&rarr;A at 5.9&nbsp;s, then A&rarr;B again at
-      21.0&nbsp;s &mdash; all while the robot was still in Zone&nbsp;A. After that it was stable:
-      Edge&nbsp;B until 73.1&nbsp;s, then Edge&nbsp;D at the dock.</p>
-    <p>The cause is that the Predictor's window is still filling in the first few seconds, so its
-      trend estimate is noisy, and Edge&nbsp;A and Edge&nbsp;B genuinely score close together in
-      Zone&nbsp;A. Hysteresis and the Orchestrator's cooldown limited the thrash but did not
-      eliminate it. <strong>The fix is a warmup gate</strong> &mdash; the Orchestrator should refuse
-      to authorise a move until the Watcher holds a minimum number of samples. That is a small
-      change and it is the first thing I would do.</p>
+  <div class="bottom">
+    <div class="panel why">
+      <div class="lbl">Why this is happening</div>
+      <div class="txt" id="why">Pick a mode and press Run. The same route, the same four networks and the same workload are used for all three.</div>
+      <div class="pipeline" id="pipeline"></div>
+    </div>
+    <div class="panel metrics">
+      <div class="mgrid">
+        <div><span>frames</span><b id="mf">0</b></div>
+        <div><span>lost</span><b id="ml">0</b></div>
+        <div><span>handoffs</span><b id="mh">0</b></div>
+        <div><span>reconn</span><b id="mr">0</b></div>
+      </div>
+      <canvas id="spark"></canvas>
+    </div>
   </div>
-
-  <ul>
-    <li><strong>Edge health is read in&#8209;process, not probed over the wire.</strong> The Watcher
-      calls each edge's <code>health()</code> directly rather than sending an ECHO_METRICS probe
-      through the relay. That is a control&#8209;plane shortcut; it keeps the focus on the handoff,
-      but it means edge health carries no measured probe latency.</li>
-    <li><strong>All four edges are asyncio tasks in one process.</strong> They are independent
-      services with independent state, but they share a CPU, so the simulated inference cost is more
-      trustworthy than a real one would be under contention.</li>
-    <li><strong>TCP loss is modelled as retransmission delay, not dropped bytes.</strong> Dropping
-      bytes from a stream would corrupt it; real TCP turns loss into delay anyway. The baseline is
-      still a competently written pipelined client, not a straw man.</li>
-    <li><strong>Single&#8209;seed results.</strong> A proper evaluation would run each mode across
-      many seeds and report distributions rather than one number per cell.</li>
-    <li><strong>The preload buffer is decided but not yet exercised.</strong> The Intent Agent
-      correctly identifies live traffic as unbufferable and reports how much it would pre&#8209;fetch
-      for non&#8209;live traffic, but the robot workload is live, so the buffer never engages in
-      these runs.</li>
-    <li><strong>Five agents are designed but not built</strong> &mdash; Cost, Security, Energy,
-      Policy and Learning. The weight vector in <code>config.py</code> is the seam they plug into.</li>
-  </ul>
-</section>
-
-<section>
-  <p class="kicker">Running it</p>
-  <h2>Everything is in the project folder</h2>
-  <p class="measure">Nothing is installed outside it. Deleting the folder removes every trace.</p>
-<pre><span class="c"># set up</span>
-python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
-
-<span class="c"># run all three experiments and rebuild the figures</span>
-.venv/bin/python scripts/run_experiments.py --duration 90 --seed 7
-.venv/bin/python scripts/plot_results.py
-
-<span class="c"># watch it live in 3D at http://127.0.0.1:8080</span>
-.venv/bin/python dashboard/server.py
-
-<span class="c"># tests</span>
-.venv/bin/python -m pytest -q</pre>
-  <p class="measure" style="margin-top:20px">The dashboard is a third&#8209;person 3D view of the
-    robot walking the route, with all four networks and all six characteristics each, all four edge
-    sites, the nine&#8209;agent pipeline showing what every agent currently believes, and a
-    plain&#8209;language line explaining each decision as it is made. The browser is fed the same
-    event stream the log file records, so what is on screen and what the numbers say cannot
-    disagree.</p>
-</section>
-
-<footer>
-  <span>ECHO &mdash; Edge Compute Handoff Orchestration</span>
-  <span class="mono">4 commits &middot; 22 tests &middot; seed 7 &middot; aioquic 1.3.0</span>
-</footer>
-
+</div>
+<div class="recbanner">
+  <span class="dot"></span>
+  <b>Recorded run</b>
+  <span class="blurb">replayed in your browser &mdash; the same event stream the live dashboard
+    renders, from a real 90&nbsp;s experiment over real QUIC.</span>
+  <span class="tip">drag to orbit &middot; scroll to zoom &middot; F toggles follow camera</span>
+  <a href="report.html">Read the full report</a>
+  <a href="https://github.com/KhadejaAhmedKZ/echo-edge-handoff">Run it live</a>
 </div>
 
 <script>
-const D = {"tcp":{"p95":[121,137,129,115,51,105,134,70,57,61,68,51,53,86,50,53,51,55,51,69,53,60,59,52,78,78,62,95,98,152,126,259,350,324,299,367,331,328,281,209,278,271,310,330,437,473,559,635,622,587,579,561,523,537,500,585,600,615,669,130,67,81,77,73,94,115,107,66,59,66,75,106,122,125,167,160,129,135,174,156,112,128,204,241,234,246,260,261,290,313,252,284,255,291,319,297,316,311,369,300,320,309,305,272,314,283,276,278,263,320,285,284,322,331,276,283,272,287,292,317],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[44.6,44.6]]},"quic":{"p95":[127,108,134,70,63,118,76,52,56,79,49,67,76,52,53,50,49,62,51,54,53,49,60,51,71,55,98,93,107,163,210,358,151,200,282,118,103,154,171,257,138,135,139,139,113,138,143,128,117,108,111,117,116,125,150,118,106,109,111,108,118,121,139,107,106,121,128,110,109,137,156,157,160,174,178,179,193,326,162,237,208,171,241,326,200,185,177,325,249,345,200,240,186,345,249,415,944,361,86,85,85,87,82,87,87,84,85,81,85,84,85,83,88,85,86,83,86,83,83,89],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[23.8,24.3],[25.6,26.1],[29.5,30.0],[72.3,72.8]]},"echo":{"p95":[129,118,117,108,110,105,110,93,49,64,59,59,110,56,50,53,50,64,53,62,52,52,61,56,64,68,97,100,97,81,119,184,108,118,97,97,75,71,103,74,86,94,122,87,67,81,95,76,61,58,67,70,68,79,95,86,57,54,56,58,72,70,83,82,57,61,78,71,56,73,211,146,109,118,131,151,141,136,242,127,176,124,135,154,223,143,147,213,151,148,143,171,145,257,145,197,154,137,27,30,25,21,23,22,24,23,24,22,24,24,23,23,22,24,25,23,23,23,27,24],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[1.4,2.0],[5.6,5.9],[20.6,21.0],[73.0,73.1]]},"crossings":[[23.4,41.4],[50.4,66.6],[70.2,84.6]]};
-
-const CSS = getComputedStyle(document.documentElement);
-const MODES = [
-  {k:'echo', name:'QUIC + ECHO', cls:'echo'},
-  {k:'quic', name:'QUIC only',   cls:'quic'},
-  {k:'tcp',  name:'TCP baseline',cls:'tcp'},
+// ------------------------------------------------------------------ config
+const NETS = {
+  wifi:      {label:'Indoor Wi-Fi', colour:'#ffffff', hex:0xffffff},
+  cellular:  {label:'Private 5G',   colour:'#ff6b00', hex:0xff6b00},
+  satellite: {label:'Satellite',    colour:'#ffb27a', hex:0xffb27a},
+  wired:     {label:'Wired dock',   colour:'#8e8e96', hex:0x8e8e96},
+};
+const NET_ORDER = ['wifi','cellular','satellite','wired'];
+const EDGES = {
+  A:{label:'Indoor lab',  net:'wifi',      pos:0.10},
+  B:{label:'Yard 5G',     net:'cellular',  pos:0.40},
+  C:{label:'Remote site', net:'satellite', pos:0.70},
+  D:{label:'Dock',        net:'wired',     pos:0.95},
+};
+const EDGE_ORDER = ['A','B','C','D'];
+const STEPS = ['STABLE','PREPARING','TRANSFERRING','VERIFYING','COMMITTING','DRAINING'];
+const AGENTS = [
+  ['watcher','Watcher','what does every network and edge look like right now?'],
+  ['predictor','Predictor','where is each one heading?'],
+  ['intent','Intent','what is the user actually doing?'],
+  ['decision','Decision','which network + edge pair costs least?'],
+  ['orchestrator','Orchestrator','act on that now, or hold - and how cheaply?'],
+  ['handoff','Handoff','move the session early, and reversibly'],
+  ['recovery','Recovery','the handoff failed - now what?'],
+  ['troubleshooter','Troubleshooter','it feels bad and nothing switched. why?'],
+  ['explainer','Explainer','say it in one sentence'],
 ];
+const ROUTE_HALF = 22;
+const xOf = p => -ROUTE_HALF + p * ROUTE_HALF * 2;
 
-/* ---- small multiples: four measures, four scales ---- */
-const PANELS = [
-  {t:'p95 end-to-end latency', u:'ms', v:{tcp:510.6, quic:186.2, echo:134.5}, d:1},
-  {t:'Median latency', u:'ms', v:{tcp:200.3, quic:102.5, echo:62.1}, d:1},
-  {t:'Longest gap with no result', u:'ms', v:{tcp:220.2, quic:803.4, echo:159.7}, d:1},
-  {t:'Time on a suboptimal edge', u:'s', v:{tcp:44.5, quic:70.8, echo:6.8}, d:1},
-];
+// ------------------------------------------------------------------ 3D scene
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
 
-document.getElementById('panels').innerHTML = PANELS.map(p => {
-  const max = Math.max(...Object.values(p.v));
-  const rows = MODES.map(m => {
-    const val = p.v[m.k];
-    const w = (val / max * 100).toFixed(1);
-    return `<div class="barrow ${m.k === 'echo' ? 'is-echo' : ''}">
-        <div class="barlab"><span>${m.name}</span><b>${val.toFixed(p.d)}${p.u}</b></div>
-        <div class="bartrack" title="${m.name}: ${val.toFixed(p.d)} ${p.u}">
-          <span class="barfill ${m.cls}" style="width:${w}%"></span></div>
-      </div>`;
-  }).join('');
-  return `<div class="panel"><p class="ptitle">${p.t}</p><div class="bars">${rows}</div></div>`;
-}).join('');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b0d);
+scene.fog = new THREE.FogExp2(0x0b0b0d, 0.012);
 
-/* ---- timeline: three panels, one shared scale ---- */
-const W = 1000, H = 96, PAD_B = 12, YMAX = 950, DUR = 90;
-const xAt = i => (i / (D.echo.p95.length - 1)) * W;
-const yAt = v => H - PAD_B - (Math.min(v, YMAX) / YMAX) * (H - PAD_B - 4);
+const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 400);
+scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+const key = new THREE.DirectionalLight(0xffffff, 0.7);  key.position.set(-9, 17, 10); scene.add(key);
+const rim = new THREE.DirectionalLight(0xff6b00, 0.55); rim.position.set(12, 7, -14); scene.add(rim);
 
-function panel(m){
-  const s = D[m.k];
-  const pts = [];
-  s.p95.forEach((v, i) => { if (v != null) pts.push(`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`); });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 120),
+  new THREE.MeshStandardMaterial({color:0x141417, roughness:.95, metalness:.05}));
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.02; scene.add(ground);
+const grid = new THREE.GridHelper(200, 100, 0x3a3a42, 0x212126);
+grid.material.transparent = true; grid.material.opacity = .5; scene.add(grid);
 
-  const bands = D.crossings.map(c =>
-    `<rect x="${(c[0]/DUR*W).toFixed(1)}" y="0" width="${((c[1]-c[0])/DUR*W).toFixed(1)}" height="${H-PAD_B}" fill="currentColor" opacity="0.06"></rect>`
-  ).join('');
+scene.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-ROUTE_HALF-4, .02, 0), new THREE.Vector3(ROUTE_HALF+4, .02, 0)]),
+  new THREE.LineBasicMaterial({color:0xff6b00, transparent:true, opacity:.45})));
 
-  const grid = [250, 500, 750].map(g =>
-    `<line x1="0" y1="${yAt(g).toFixed(1)}" x2="${W}" y2="${yAt(g).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.12"></line>
-     <text x="4" y="${(yAt(g)-3).toFixed(1)}" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity="0.45">${g}</text>`
-  ).join('');
+const bands = {};
+NET_ORDER.forEach((nid, i) => {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ROUTE_HALF*2+8, 2.4),
+    new THREE.MeshBasicMaterial({color:NETS[nid].hex, transparent:true, opacity:.05,
+      side:THREE.DoubleSide}));
+  mesh.rotation.x = -Math.PI/2;
+  mesh.position.set(0, .01, -3.2 - i*2.6);
+  scene.add(mesh); bands[nid] = mesh;
+});
 
-  const ticks = s.lost.map((n, i) => n > 0
-    ? `<line x1="${xAt(i).toFixed(1)}" y1="${H-PAD_B}" x2="${xAt(i).toFixed(1)}" y2="${H-2}" stroke="var(--warn)" stroke-width="2.5"></line>` : ''
-  ).join('');
-
-  const colour = m.k === 'echo' ? 'var(--echo)' : m.k === 'quic' ? 'var(--quic)' : 'var(--tcp)';
-  const lost = s.lost.reduce((a, b) => a + b, 0);
-  const peak = Math.max(...s.p95.filter(v => v != null));
-
-  return `<div class="tlrow">
-    <div class="tlhead"><span class="tlname">${m.name}</span>
-      <span class="tlmeta">peak ${peak} ms &middot; ${lost} frame${lost === 1 ? '' : 's'} lost</span></div>
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-         aria-label="${m.name}: 95th percentile latency over the 90 second route, peaking at ${peak} milliseconds, with ${lost} frames lost.">
-      ${bands}${grid}
-      <line x1="0" y1="${H-PAD_B}" x2="${W}" y2="${H-PAD_B}" stroke="currentColor" stroke-width="1" opacity="0.28"></line>
-      <polyline points="${pts.join(' ')}" fill="none" stroke="${colour}" stroke-width="2"
-                stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
-      ${ticks}
-    </svg>
-  </div>`;
+function label(text, colour, size, w){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const x = c.getContext('2d');
+  x.font = '700 ' + size + 'px Inter,sans-serif';
+  x.fillStyle = colour; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.shadowColor = 'rgba(0,0,0,.9)'; x.shadowBlur = 10;
+  x.fillText(text, 256, 64);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(c), transparent:true, depthTest:false}));
+  s.scale.set(w, w/4, 1);
+  return s;
 }
 
-document.getElementById('timeline').innerHTML =
-  MODES.map(panel).join('') +
-  `<div class="tlaxis"><span>0 s</span><span>Zone A / B</span><span>Zone B / C</span><span>Zone C / D</span><span>90 s</span></div>
-   <div class="legend">
-     <span><i class="swatch band"></i>zone crossing window</span>
-     <span><i class="swatch tick"></i>lost frame</span>
-     <span><i class="swatch" style="background:var(--echo)"></i>QUIC + ECHO</span>
-     <span><i class="swatch" style="background:var(--quic)"></i>QUIC only</span>
-     <span><i class="swatch" style="background:var(--tcp)"></i>TCP baseline</span>
-   </div>`;
-</script>
+const towers = {};
+EDGE_ORDER.forEach(eid => {
+  const spec = EDGES[eid];
+  const g = new THREE.Group();
+  g.position.set(xOf(spec.pos), 0, -14);
 
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, .35, 6),
+    new THREE.MeshStandardMaterial({color:0x1b1b1f, roughness:.7, metalness:.35}));
+  base.position.y = .17; g.add(base);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.4, 1.5),
+    new THREE.MeshStandardMaterial({color:0x232328, roughness:.5, metalness:.5,
+      emissive:0xff6b00, emissiveIntensity:.05}));
+  body.position.y = 2.05; g.add(body);
+
+  const units = [];
+  for (let i=0;i<5;i++){
+    const u = new THREE.Mesh(new THREE.BoxGeometry(1.62, .16, 1.62),
+      new THREE.MeshStandardMaterial({color:0x2c2c32, emissive:NETS[spec.net].hex,
+        emissiveIntensity:.1, transparent:true, opacity:.55}));
+    u.position.y = .85 + i*.62; g.add(u); units.push(u);
+  }
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(2.1, .05, 8, 48),
+    new THREE.MeshBasicMaterial({color:0xff6b00, transparent:true, opacity:.16}));
+  halo.rotation.x = -Math.PI/2; halo.position.y = .05; g.add(halo);
+
+  const lbl = label('EDGE ' + eid, '#ffffff', 62, 5.6); lbl.position.set(0, 5.1, 0); g.add(lbl);
+  const sub = label(spec.label, '#8a8a93', 34, 4.8);    sub.position.set(0, 4.4, 0); g.add(sub);
+
+  scene.add(g);
+  towers[eid] = {group:g, body, units, halo, top:new THREE.Vector3(xOf(spec.pos), 3.9, -14)};
+});
+
+[['ZONE A',0.08],['ZONE B',0.40],['ZONE C',0.70],['ZONE D',0.95]].forEach(z => {
+  const s = label(z[0], '#5c5c65', 38, 4.2); s.position.set(xOf(z[1]), .95, 5.0); scene.add(s);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,1.5,6),
+    new THREE.MeshBasicMaterial({color:0x3a3a42}));
+  post.position.set(xOf(z[1]), .75, 5.0); scene.add(post);
+});
+
+// ---- the EDGE inspection robot -------------------------------------------
+// A quadruped: yellow shell over a black chassis, four Z-folded legs, and the
+// sensor payload on its back. The payload mast is where the radio lives, so it
+// is also where the link beam starts.
+const matYellow = new THREE.MeshStandardMaterial({color:0xf2c200, roughness:.42, metalness:.28});
+const matDark   = new THREE.MeshStandardMaterial({color:0x141416, roughness:.55, metalness:.5});
+const matMid    = new THREE.MeshStandardMaterial({color:0x2a2a2e, roughness:.6, metalness:.42});
+const ledMat    = new THREE.MeshStandardMaterial({color:0x2a2a2e, emissive:0xff6b00,
+                                                  emissiveIntensity:1.2});
+
+const walker = new THREE.Group();
+const robot = new THREE.Group();
+robot.scale.setScalar(1.55);
+walker.add(robot);
+
+// chassis + shell
+const bodyCore = new THREE.Mesh(new THREE.BoxGeometry(1.70,.30,.66), matDark);
+bodyCore.position.y = 1.02; robot.add(bodyCore);
+const shellTop = new THREE.Mesh(new THREE.BoxGeometry(1.54,.20,.72), matYellow);
+shellTop.position.y = 1.16; robot.add(shellTop);
+[.76, -.76].forEach(x => {
+  const shroud = new THREE.Mesh(new THREE.BoxGeometry(.32,.44,.80), matYellow);
+  shroud.position.set(x, 1.02, 0); robot.add(shroud);
+});
+
+// front sensor head
+const nose = new THREE.Mesh(new THREE.BoxGeometry(.32,.32,.62), matYellow);
+nose.position.set(.96, 1.05, 0); nose.rotation.z = -0.13; robot.add(nose);
+const face = new THREE.Mesh(new THREE.BoxGeometry(.07,.22,.52), matDark);
+face.position.set(1.13, 1.02, 0); robot.add(face);
+[.15, -.15].forEach(z => {
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.03,10), matMid);
+  lens.rotation.z = Math.PI/2; lens.position.set(1.17, 1.03, z); robot.add(lens);
+});
+
+// EDGE badge on both flanks
+function sticker(text){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 112;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0,0,256,112);
+  x.fillStyle = '#ff6b00'; x.font = '700 58px Inter,sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, 128, 60);
+  return new THREE.CanvasTexture(c);
+}
+const badgeTex = sticker('EDGE');
+[[.336, 0], [-.336, Math.PI]].forEach(b => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.40,.18),
+    new THREE.MeshBasicMaterial({map:badgeTex}));
+  m.position.set(-.10, 1.04, b[0]); m.rotation.y = b[1]; robot.add(m);
+});
+
+// status LEDs - these track how healthy the link feels
+[.34, -.34].forEach(z => {
+  const led = new THREE.Mesh(new THREE.BoxGeometry(.05,.13,.03), ledMat);
+  led.position.set(.82, 1.14, z); robot.add(led);
+});
+
+// sensor payload on the back, and the radio that the beam leaves from
+const mast = new THREE.Group(); mast.position.set(.10, 1.26, 0);
+const post = new THREE.Mesh(new THREE.BoxGeometry(.20,.30,.22), matDark);
+post.position.y = .15; mast.add(post);
+const sensor = new THREE.Mesh(new THREE.CylinderGeometry(.10,.10,.18,12), matMid);
+sensor.position.y = .40; mast.add(sensor);
+[0, Math.PI/2].forEach(r => {
+  const cage = new THREE.Mesh(new THREE.TorusGeometry(.17,.026,8,22), matDark);
+  cage.position.y = .42; cage.rotation.y = r; mast.add(cage);
+});
+const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.34,6), matDark);
+antenna.position.set(-.58, 1.42, .26); robot.add(antenna);
+robot.add(mast);
+const glow = new THREE.PointLight(0xff6b00, 1.4, 7);
+glow.position.set(.10, 1.72, 0); robot.add(glow);
+
+// four legs, folded the way a quadruped stands
+const legs = [];
+function makeLeg(x, z, phase){
+  const hip = new THREE.Group();
+  hip.position.set(x, 1.00, z);
+  const hipJoint = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.14,12), matDark);
+  hipJoint.rotation.x = Math.PI/2; hip.add(hipJoint);
+
+  const thigh = new THREE.Mesh(new THREE.BoxGeometry(.24,.48,.22), matYellow);
+  thigh.geometry.translate(0,-.24,0); hip.add(thigh);
+
+  const knee = new THREE.Group();
+  knee.position.y = -.48;
+  const kneeJoint = new THREE.Mesh(new THREE.CylinderGeometry(.085,.085,.14,10), matDark);
+  kneeJoint.rotation.x = Math.PI/2; knee.add(kneeJoint);
+  const shin = new THREE.Mesh(new THREE.BoxGeometry(.085,.52,.10), matDark);
+  shin.geometry.translate(0,-.26,0); knee.add(shin);
+  const foot = new THREE.Mesh(new THREE.SphereGeometry(.072,10,8), matDark);
+  foot.position.y = -.52; knee.add(foot);
+  hip.add(knee);
+
+  robot.add(hip);
+  const leg = {hip, knee, phase};
+  legs.push(leg);
+  return leg;
+}
+// trot gait: diagonal pairs move together
+makeLeg( .70,  .36, 0);
+makeLeg( .70, -.36, Math.PI);
+makeLeg(-.70,  .36, Math.PI);
+makeLeg(-.70, -.36, 0);
+
+walker.position.set(xOf(0), 0, 0);
+scene.add(walker);
+const nameTag = label('ROBOT-01', '#ffffff', 34, 3.6);
+nameTag.position.set(0, 3.3, 0); walker.add(nameTag);
+
+// ---- beams ---------------------------------------------------------------
+function makeBeam(colour, opacity){
+  const geo = new THREE.BufferGeometry().setFromPoints(
+    Array.from({length:24}, () => new THREE.Vector3()));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color:colour, transparent:true, opacity:opacity}));
+  line.frustumCulled = false; scene.add(line); return line;
+}
+const activeBeam  = makeBeam(0xff6b00, .95);
+const prepareBeam = makeBeam(0xffffff, .0);
+
+function curveTo(line, from, to, lift){
+  const pts = [];
+  for (let i=0;i<24;i++){
+    const t = i/23;
+    const p = new THREE.Vector3().lerpVectors(from, to, t);
+    p.y += Math.sin(Math.PI*t) * lift;
+    pts.push(p);
+  }
+  line.geometry.setFromPoints(pts);
+  return pts;
+}
+
+const packets = [];
+for (let i=0;i<14;i++){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(.1, 8, 8),
+    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.9}));
+  m.visible = false; scene.add(m); packets.push({mesh:m, t:i/14});
+}
+
+// ---- camera --------------------------------------------------------------
+let follow = true, yaw = -0.30, pitch = 0.28, dist = 14.5;
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', e => {dragging = true; lastX = e.clientX; lastY = e.clientY;});
+addEventListener('pointerup', () => dragging = false);
+addEventListener('pointermove', e => {
+  if(!dragging) return;
+  yaw -= (e.clientX - lastX) * .006;
+  pitch = Math.max(.05, Math.min(1.15, pitch + (e.clientY - lastY) * .004));
+  lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault(); dist = Math.max(6, Math.min(60, dist + e.deltaY * .016));
+}, {passive:false});
+addEventListener('keydown', e => { if(e.key === 'f' || e.key === 'F') follow = !follow; });
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  drawSpark();
+});
+
+// ------------------------------------------------------------------ state
+const S = {
+  position:0, zone:'standing by', nets:{}, edges:{}, agents:{}, activeEdge:'A',
+  activeNetwork:'wifi', handoff:'STABLE', targetEdge:null, e2e:null, hist:[],
+  running:false, mode:'echo',
+};
+
+const camTarget = new THREE.Vector3();
+camera.position.set(xOf(0) - 12, 5.6, 1.4);
+let phase = 0; const clock = new THREE.Clock();
+
+function frame(){
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), .05);
+
+  const targetX = xOf(S.position);
+  walker.position.x += (targetX - walker.position.x) * (1 - Math.pow(0.02, dt));
+  const moving = S.running;
+  phase += dt * (moving ? 6.4 : 1.0);
+  const swing = moving ? .34 : .015;
+  legs.forEach(L => {
+    const p = phase + L.phase;
+    L.hip.rotation.z  = 0.22 + Math.sin(p) * swing;
+    L.knee.rotation.z = -0.50 - Math.max(0, Math.sin(p + 1.15)) * (moving ? .42 : .02);
+  });
+  // body bobs at twice the gait frequency, as a trot does
+  robot.position.y = Math.abs(Math.sin(phase)) * .035;
+  robot.rotation.z = Math.sin(phase) * (moving ? .012 : 0);
+
+  const health = S.e2e == null ? .5 : Math.max(.12, Math.min(1, 160 / Math.max(40, S.e2e)));
+  ledMat.emissiveIntensity = .4 + health * 1.7;
+  glow.intensity = .5 + health * 1.8;
+
+  const from = new THREE.Vector3(walker.position.x + .16, 2.62, 0);
+  const tw = towers[S.activeEdge];
+  let pts = null;
+  if (tw){
+    pts = curveTo(activeBeam, from, tw.top, 3.4 + Math.abs(from.x - tw.top.x) * .10);
+    activeBeam.material.opacity = .6 + Math.sin(phase*2)*.12;
+  }
+  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING'].indexOf(S.handoff) >= 0;
+  if (staging && S.targetEdge && towers[S.targetEdge]){
+    curveTo(prepareBeam, from, towers[S.targetEdge].top,
+            3.4 + Math.abs(from.x - towers[S.targetEdge].top.x) * .10);
+    prepareBeam.material.opacity = .4 + Math.sin(phase*6)*.32;
+  } else prepareBeam.material.opacity = 0;
+
+  packets.forEach(p => {
+    if (!pts || !S.running){ p.mesh.visible = false; return; }
+    p.mesh.visible = true;
+    p.t = (p.t + dt * .85) % 1;
+    const idx = Math.min(22, Math.floor(p.t * 23));
+    p.mesh.position.copy(pts[idx]).lerp(pts[idx+1], p.t*23 - idx);
+    p.mesh.material.opacity = .3 + .6*Math.sin(Math.PI*p.t);
+  });
+
+  EDGE_ORDER.forEach(eid => {
+    const t = towers[eid], h = S.edges[eid] || {};
+    const lit = Math.round((h.cpu || .15) * t.units.length);
+    t.units.forEach((u, i) => {
+      const on = i < lit;
+      u.material.emissiveIntensity += ((on ? .8 : .08) - u.material.emissiveIntensity) * .12;
+      u.material.opacity += ((on ? .95 : .4) - u.material.opacity) * .12;
+    });
+    const isActive = eid === S.activeEdge, isTarget = eid === S.targetEdge && staging;
+    t.body.material.emissiveIntensity += ((isActive ? .5 : .05) - t.body.material.emissiveIntensity)*.1;
+    t.halo.material.color.setHex(isTarget ? 0xffffff : 0xff6b00);
+    t.halo.material.opacity = isActive ? .5 + Math.sin(phase*2.4)*.18
+                            : isTarget ? .45 + Math.sin(phase*7)*.3 : .14;
+    t.halo.scale.setScalar(isActive ? 1.12 : 1);
+  });
+
+  NET_ORDER.forEach(nid => {
+    const q = (S.nets[nid] && S.nets[nid].quality) || 0;
+    bands[nid].material.opacity += (0.03 + q*0.14 - bands[nid].material.opacity) * .1;
+  });
+
+  camTarget.set(walker.position.x + 1.4, 1.7, -2.6);
+  const cx = camTarget.x - Math.cos(yaw) * dist * Math.cos(pitch);
+  const cz = camTarget.z - Math.sin(yaw) * dist * Math.cos(pitch);
+  const cy = camTarget.y + dist * Math.sin(pitch);
+  if (follow) camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.pow(0.02, dt));
+  else camera.position.set(cx, cy, cz);
+  camera.lookAt(camTarget);
+  renderer.render(scene, camera);
+}
+frame();
+
+// ------------------------------------------------------------------ HUD
+const el = id => document.getElementById(id);
+const fmt = (v, d, unit) => (v == null || Number.isNaN(v)) ? '-' : v.toFixed(d || 0) + (unit || '');
+
+NET_ORDER.forEach(nid => {
+  const d = document.createElement('div');
+  d.className = 'net'; d.id = 'net-'+nid; d.style.setProperty('--nc', NETS[nid].colour);
+  d.innerHTML =
+    '<div class="nh"><span class="nm">' + NETS[nid].label + '</span>' +
+      '<span class="badge" id="badge-' + nid + '">watching</span></div>' +
+    '<div class="sig"><div class="track"><i id="q-' + nid + '" style="width:0%"></i></div>' +
+      '<span class="pct" id="qv-' + nid + '">-</span></div>' +
+    '<div class="trend" id="tr-' + nid + '">&nbsp;</div>' +
+    '<div class="chars">' +
+      '<div class="ch"><label>Latency</label><div class="track"><i class="fill-bad" id="b-rtt-' + nid + '" style="width:0%"></i></div><b id="v-rtt-' + nid + '">-</b></div>' +
+      '<div class="ch"><label>Jitter</label><div class="track"><i class="fill-bad" id="b-jit-' + nid + '" style="width:0%"></i></div><b id="v-jit-' + nid + '">-</b></div>' +
+      '<div class="ch"><label>Loss</label><div class="track"><i class="fill-bad" id="b-loss-' + nid + '" style="width:0%"></i></div><b id="v-loss-' + nid + '">-</b></div>' +
+      '<div class="ch"><label>Bandwidth</label><div class="track"><i class="fill-good" id="b-bw-' + nid + '" style="width:0%"></i></div><b id="v-bw-' + nid + '">-</b></div>' +
+    '</div>';
+  el('nets').appendChild(d);
+});
+
+EDGE_ORDER.forEach(eid => {
+  const d = document.createElement('div');
+  d.className = 'edge'; d.id = 'edge-'+eid;
+  d.innerHTML =
+    '<div class="eh"><span class="eid">' + eid + '</span><span class="en">' + EDGES[eid].label + '</span>' +
+      '<span class="est" id="est-' + eid + '">standby</span></div>' +
+    '<div class="emet">' +
+      '<div><span>infer</span><b id="inf-' + eid + '">-</b></div>' +
+      '<div><span>cpu</span><b id="cpuv-' + eid + '">-</b></div>' +
+      '<div><span>sessions</span><b id="ses-' + eid + '">0</b></div>' +
+    '</div>';
+  el('edges').appendChild(d);
+});
+
+AGENTS.forEach((a, i) => {
+  const d = document.createElement('div');
+  d.className = 'agent'; d.id = 'ag-' + a[0];
+  d.innerHTML =
+    '<div class="ah"><span class="num">' + (i+1) + '</span><span class="an">' + a[1] + '</span>' +
+      '<span class="pulse"></span></div>' +
+    '<div class="aq">' + a[2] + '</div>' +
+    '<div class="av" id="av-' + a[0] + '"><span class="g">idle</span></div>';
+  el('agents').appendChild(d);
+});
+
+el('pipeline').innerHTML = STEPS.map(s => '<span class="step" id="step-' + s + '">' + s + '</span>').join('');
+
+function bar(id, value, max){
+  const n = el(id); if (!n) return;
+  n.style.width = Math.max(0, Math.min(100, (value/max)*100)).toFixed(0) + '%';
+}
+
+function renderNetworks(){
+  const trends = (S.agents.predictor && S.agents.predictor.trends) || {};
+  NET_ORDER.forEach(nid => {
+    const n = S.nets[nid] || {}, tr = trends[nid] || {};
+    const box = el('net-'+nid);
+    const up = n.available !== false;
+    box.classList.toggle('active', nid === S.activeNetwork);
+    box.classList.toggle('down', !up);
+
+    bar('q-'+nid, (n.quality||0)*100, 100);
+    el('qv-'+nid).textContent = up ? ((n.quality||0)*100).toFixed(0)+'%' : '--';
+
+    const badge = el('badge-'+nid);
+    badge.textContent = nid === S.activeNetwork ? 'IN USE' : (up ? 'WATCHING' : 'NO COVERAGE');
+    badge.className = 'badge' + (nid === S.activeNetwork ? ' live' : (up ? '' : ' dead'));
+
+    const t = el('tr-'+nid);
+    if (!up){ t.textContent = 'unavailable at this position'; t.className = 'trend'; }
+    else if (tr.degrading && tr.seconds_to_unusable != null && tr.seconds_to_unusable < 20){
+      t.textContent = 'predicted unusable in ' + tr.seconds_to_unusable.toFixed(1) + 's';
+      t.className = 'trend bad';
+    } else if (tr.degrading){
+      t.textContent = 'degrading - ' + fmt(tr.predicted_rtt_ms,0) + 'ms predicted in 2s';
+      t.className = 'trend bad';
+    } else if (tr.quality_slope > 0.005){
+      t.textContent = 'improving - ' + fmt(tr.predicted_rtt_ms,0) + 'ms predicted in 2s';
+      t.className = 'trend good';
+    } else { t.textContent = 'steady'; t.className = 'trend'; }
+
+    if (up){
+      bar('b-rtt-'+nid, n.rtt_ms||0, 700);   el('v-rtt-'+nid).textContent = fmt(n.rtt_ms,0,'ms');
+      bar('b-jit-'+nid, n.jitter_ms||0, 50); el('v-jit-'+nid).textContent = fmt(n.jitter_ms,1,'ms');
+      bar('b-loss-'+nid, (n.loss||0)*100, 15); el('v-loss-'+nid).textContent = fmt((n.loss||0)*100,2,'%');
+      bar('b-bw-'+nid, n.bandwidth_mbps||0, 700);
+      el('v-bw-'+nid).textContent = fmt(n.bandwidth_mbps,0,'M');
+    } else {
+      ['rtt','jit','loss','bw'].forEach(k => {
+        bar('b-'+k+'-'+nid, 0, 1); el('v-'+k+'-'+nid).textContent = '-';
+      });
+    }
+  });
+}
+
+function renderAgents(){
+  const a = S.agents; if (!a || !a.watcher) return;
+  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING','DRAINING'].indexOf(S.handoff) >= 0;
+  const set = (id, html, on) => {
+    el('av-'+id).innerHTML = html;
+    el('ag-'+id).classList.toggle('on', !!on);
+  };
+
+  set('watcher',
+      '<span class="k">' + a.watcher.networks + '</span> networks <span class="g">/</span> ' +
+      '<span class="k">' + a.watcher.edges + '</span> edges <span class="g">every ' +
+      a.watcher.tick_ms + 'ms</span><br><span class="g">' + a.watcher.samples +
+      ' samples held</span>', S.running);
+
+  const tr = a.predictor.trends || {};
+  const worry = Object.keys(tr).map(k => [k, tr[k]])
+    .filter(p => p[1].degrading || (p[1].seconds_to_unusable != null && p[1].seconds_to_unusable < 20))
+    .sort((x,y) => (x[1].seconds_to_unusable == null ? 1e9 : x[1].seconds_to_unusable)
+                 - (y[1].seconds_to_unusable == null ? 1e9 : y[1].seconds_to_unusable));
+  set('predictor', worry.length
+      ? worry.slice(0,2).map(p => '<span class="k">' + NETS[p[0]].label + '</span> ' +
+          (p[1].seconds_to_unusable != null && p[1].seconds_to_unusable < 20
+            ? 'unusable in ' + p[1].seconds_to_unusable.toFixed(1) + 's'
+            : 'degrading, ' + p[1].predicted_rtt_ms.toFixed(0) + 'ms in ' +
+              a.predictor.horizon_s + 's')).join('<br>')
+      : '<span class="g">all four links steady over the next ' + a.predictor.horizon_s + 's</span>',
+      worry.length > 0);
+
+  set('intent',
+      '<span class="k">' + a.intent.intent + '</span><br>' +
+      '<span class="g">' + a.intent.description + '</span><br>' +
+      (a.intent.live
+        ? '<span class="g">live - buffering cannot help</span>'
+        : '<span class="k">preload ' + a.intent.preload_buffer_s + 's</span> <span class="g">absorbs the switch</span>'),
+      true);
+
+  const c = a.decision.current, cands = a.decision.candidates || [];
+  let runner = null;
+  for (let i=0;i<cands.length;i++){
+    if (cands[i].edge_id !== c.edge_id || cands[i].network_id !== c.network_id){ runner = cands[i]; break; }
+  }
+  const streaks = a.decision.streaks || {};
+  const streakKeys = Object.keys(streaks);
+  set('decision',
+      'on <span class="k">' + c.edge_id + '/' + c.network_id + '</span> score ' + (c.score == null ? '-' : c.score) +
+      ' <span class="g">(' + (c.e2e_ms == null ? '-' : c.e2e_ms) + 'ms e2e)</span><br>' +
+      (runner ? 'next best <span class="k">' + runner.edge_id + '/' + runner.network_id + '</span> ' +
+                runner.score + ' <span class="g">(' + runner.e2e_ms + 'ms)</span><br>' : '') +
+      '<span class="g">needs ' + a.decision.margin_pct + '% for ' + a.decision.patience + ' ticks' +
+      (streakKeys.length ? ' - ' + streakKeys.map(k => k + ' at ' + streaks[k]).join(', ') : '') +
+      '</span>', true);
+
+  const o = a.orchestrator || {};
+  set('orchestrator',
+      'action <span class="k">' + (o.last_action || '-') + '</span>' +
+      (o.cooldown_left_s > 0 ? ' <span class="g">cooldown ' + o.cooldown_left_s + 's</span>' : '') +
+      '<br><span class="g">' + o.cycles + ' cycles, ' + o.moves + ' moves, ' +
+      o.vetoes + ' vetoed</span>' +
+      (o.last_veto ? '<br><span class="k">veto: ' + o.last_veto + '</span>' : ''),
+      o.last_action && o.last_action !== 'hold');
+
+  set('handoff',
+      'state <span class="k">' + a.handoff.state + '</span>' +
+      (S.targetEdge && staging ? ' <span class="g">to ' + S.targetEdge + '</span>' : '') + '<br>' +
+      '<span class="g">' + a.handoff.completed + ' completed, ' + a.handoff.failed + ' failed' +
+      (a.handoff.last_ms != null ? ', last ' + a.handoff.last_ms + 'ms' : '') + '</span><br>' +
+      '<span class="g">' + a.handoff.state_bytes + 'B state moved</span>', staging);
+
+  set('recovery', a.recovery.blocked.length
+      ? '<span class="k">backing off ' + a.recovery.blocked.join(', ') + '</span><br>' +
+        '<span class="g">' + a.recovery.recoveries + ' recoveries</span>'
+      : '<span class="g">' + a.recovery.recoveries + ' recoveries - nothing blocked</span>',
+      a.recovery.blocked.length > 0);
+
+  const d = a.troubleshooter || {};
+  const bad = d.cause && d.cause !== 'healthy';
+  set('troubleshooter', bad
+      ? '<span class="k">' + d.cause + '</span><br><span class="g">' + (d.detail || d.headline) + '</span>'
+      : '<span class="g">nothing is wrong</span>', bad);
+
+  set('explainer', '<span class="g">' + (a.explainer.text || '--') + '</span>', true);
+}
+
+function renderState(s){
+  const w = s.world || {};
+  S.position = w.position != null ? w.position : S.position;
+  S.zone = w.zone || S.zone;
+  S.nets = w.networks || S.nets;
+  S.edges = s.edges || S.edges;
+  S.agents = s.agents || S.agents;
+  S.activeEdge = s.active_edge || S.activeEdge;
+  S.activeNetwork = s.active_network || S.activeNetwork;
+  S.handoff = s.handoff_state || S.handoff;
+  S.e2e = s.live_e2e_ms != null ? s.live_e2e_ms : S.e2e;
+  S.mode = s.mode || S.mode;
+
+  el('t').textContent = (w.t || 0).toFixed(1) + 's';
+  el('e2e').textContent = S.e2e == null ? '-' : S.e2e.toFixed(0) + ' ms';
+  el('zone').textContent = S.zone;
+  if (S.agents.watcher) el('tick').textContent = 'every ' + S.agents.watcher.tick_ms + ' ms';
+
+  renderNetworks();
+  renderAgents();
+
+  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING'].indexOf(S.handoff) >= 0;
+  EDGE_ORDER.forEach(eid => {
+    const h = S.edges[eid] || {}, box = el('edge-'+eid);
+    box.classList.toggle('active', eid === S.activeEdge);
+    box.classList.toggle('target', staging && eid === S.targetEdge);
+    el('inf-'+eid).textContent  = h.expected_inference_ms ? h.expected_inference_ms.toFixed(0)+'ms' : '-';
+    el('cpuv-'+eid).textContent = h.cpu ? (h.cpu*100).toFixed(0)+'%' : '-';
+    el('ses-'+eid).textContent  = h.active_sessions == null ? 0 : h.active_sessions;
+    el('est-'+eid).textContent  = eid === S.activeEdge ? 'ACTIVE'
+      : (staging && eid === S.targetEdge) ? S.handoff : 'standby';
+  });
+
+  const idx = STEPS.indexOf(S.handoff);
+  STEPS.forEach((st, i) => {
+    const n = el('step-'+st);
+    n.classList.toggle('on', st === S.handoff);
+    n.classList.toggle('done', idx > 0 && i < idx);
+  });
+
+  if (s.explanation) el('why').textContent = s.explanation;
+  el('mf').textContent = s.frames_sent || 0;
+  el('ml').textContent = s.frames_lost || 0;
+  el('mh').textContent = s.handoffs || 0;
+  el('mr').textContent = s.reconnects || 0;
+}
+
+const spark = el('spark'), sctx = spark.getContext('2d');
+function drawSpark(){
+  const w = spark.width = Math.max(2, spark.clientWidth * 2), h = spark.height = 80;
+  sctx.clearRect(0,0,w,h);
+  if (S.hist.length < 2) return;
+  const max = Math.max.apply(null, [120].concat(S.hist));
+  sctx.beginPath();
+  S.hist.forEach((v,i) => {
+    const x = i/(S.hist.length-1)*w, y = h - (v/max)*h*.9 - 4;
+    i ? sctx.lineTo(x,y) : sctx.moveTo(x,y);
+  });
+  sctx.strokeStyle = '#ff6b00'; sctx.lineWidth = 2.5; sctx.stroke();
+  sctx.lineTo(w,h); sctx.lineTo(0,h); sctx.closePath();
+  sctx.fillStyle = 'rgba(255,107,0,.12)'; sctx.fill();
+}
+
+function log(text, hi){
+  const d = document.createElement('div');
+  d.className = 'ev' + (hi ? ' hi' : '');
+  d.innerHTML = '<b>' + el('t').textContent + '</b><span>' + text + '</span>';
+  el('log').prepend(d);
+  while (el('log').children.length > 40) el('log').lastChild.remove();
+}
+
+// ------------------------------------------------------------------ socket
+/* Static build: there is no backend here. This page replays a recorded run of
+   the real experiment through exactly the same handle() dispatcher the live
+   dashboard uses, so what you see is what the run produced. */
+const REC = {};
+let raf = null, cursor = 0, startedAt = 0, current = null, loading = false;
+
+function halt(){
+  if (raf) cancelAnimationFrame(raf);
+  raf = null; S.running = false;
+}
+
+function drive(events, from){
+  halt();
+  cursor = from;
+  const base = events.length ? events[0].t : 0;
+  const offset = events[from] ? events[from].t - base : 0;
+  startedAt = performance.now() / 1000 - offset;
+  S.running = true;
+  function tick(){
+    const now = performance.now() / 1000 - startedAt;
+    while (cursor < events.length && (events[cursor].t - base) <= now){
+      handle(events[cursor++]);
+    }
+    if (cursor < events.length){ raf = requestAnimationFrame(tick); }
+    else { S.running = false; raf = null; setPlay(false); }
+  }
+  raf = requestAnimationFrame(tick);
+  setPlay(true);
+}
+
+function setPlay(on){
+  const b = el('start');
+  b.textContent = on ? 'Pause' : (cursor > 0 ? 'Resume' : 'Play');
+}
+
+async function loadMode(m){
+  if (REC[m]) return REC[m];
+  loading = true;
+  el('why').textContent = 'Loading the recorded ' + m + ' run\u2026';
+  const r = await fetch('data/' + m + '.json', {cache: 'force-cache'});
+  if (!r.ok) throw new Error('could not load data/' + m + '.json');
+  REC[m] = await r.json();
+  loading = false;
+  return REC[m];
+}
+
+async function selectMode(m, autoplay){
+  halt(); cursor = 0;
+  el('log').innerHTML = ''; S.hist = []; drawSpark();
+  try {
+    current = await loadMode(m);
+  } catch (err){
+    el('why').textContent = err.message;
+    return;
+  }
+  // Paint the first state so the page is never an empty shell.
+  for (let i = 0; i < current.length && i < 400; i++){
+    if (current[i].kind === 'state'){ renderState(current[i]); break; }
+  }
+  setPlay(false);
+  if (autoplay) drive(current, 0);
+}
+
+const send = o => {
+  if (o.cmd === 'start'){
+    if (loading) return;
+    if (raf){ halt(); setPlay(false); return; }      // Pause
+    if (current) drive(current, cursor);             // Play or Resume
+  } else if (o.cmd === 'stop'){
+    halt(); setPlay(false);
+  } else if (o.cmd === 'replay'){
+    if (current) drive(current, 0);
+  }
+};
+
+function handle(evt){
+  switch(evt.kind){
+    case 'state': renderState(evt); break;
+    case 'frame':
+      if (evt.e2e_ms != null){ S.hist.push(evt.e2e_ms); if (S.hist.length > 220) S.hist.shift(); drawSpark(); }
+      break;
+    case 'run_begin':
+      S.running = true; S.hist = []; el('log').innerHTML = '';
+      log('run started - ' + evt.mode + ', ' + evt.duration_s + 's', true); break;
+    case 'run_end':
+      S.running = false;
+      log('run finished - p95 ' + evt.p95_ms + 'ms, zone gap ' + evt.zone_gap_ms +
+          'ms, ' + evt.frames_lost + ' lost', true);
+      break;
+    case 'handoff_begin':
+      S.targetEdge = evt.target_edge;
+      log('handoff ' + evt.source_edge + ' to ' + evt.target_edge + ' over ' +
+          evt.target_network + ' - ' + evt.reason, true);
+      break;
+    case 'handoff_complete':
+      S.targetEdge = null;
+      log('committed in ' + evt.total_ms + 'ms (prepare ' + evt.prepare_ms + ', state ' +
+          evt.state_ms + ', verify ' + evt.verify_ms + ', commit ' + evt.commit_ms + '), ' +
+          evt.state_bytes + 'B state');
+      break;
+    case 'handoff_failed': S.targetEdge = null; log('handoff FAILED: ' + evt.reason, true); break;
+    case 'recovery': log('recovery: ' + evt.action + ' - ' + evt.reason, true); break;
+    case 'quic_migration':
+      log('QUIC migrated ' + evt.from_network + ' to ' + evt.to_network +
+          ' - same connection, no handshake'); break;
+    case 'tcp_connection_lost': log('TCP connection lost on ' + evt.edge_id, true); break;
+    case 'tcp_reconnected':
+      log('TCP reconnected to ' + evt.edge_id + ' after ' + evt.outage_ms +
+          'ms - session rebuilt cold', true); break;
+    case 'handoff_state': if (evt.target_edge) S.targetEdge = evt.target_edge; break;
+    case 'explanation': el('why').textContent = evt.text; break;
+    case 'error': log(evt.message, true); break;
+  }
+}
+
+let mode = 'echo';
+document.querySelectorAll('#modes button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('#modes button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); mode = b.dataset.mode; selectMode(mode, false);
+  };
+});
+el('start').onclick  = () => send({cmd:'start', mode:mode, duration:90, seed:7});
+el('stop').onclick   = () => send({cmd:'stop'});
+el('replay').onclick = () => send({cmd:'replay', mode:mode, speed:1});
+drawSpark(); selectMode(mode, false);
+</script>
 </body>
 </html>

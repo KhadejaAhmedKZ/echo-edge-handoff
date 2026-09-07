@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="ECHO - proactive edge compute handoff over QUIC. Prototype report for the Advanced Technology Pioneers 2026 EDGE challenge.">
+<meta property="og:title" content="ECHO - Edge Compute Handoff Orchestration">
+<meta property="og:description" content="Keeping a live AI inference session running, and fast, while both the network and the nearest edge change.">
+<meta property="og:type" content="article">
+<title>ECHO Edge Handoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#fbfaf8; --surface:#ffffff; --surface-2:#f4f1ed; --line:#e4dfd8; --line-2:#cfc8bf;
+  --ink:#17161a; --ink-2:#3d3a42; --muted:#6e6a72; --faint:#94909a;
+  --accent:#d95500; --accent-soft:#fbeade; --accent-line:#e8a67a;
+  --echo:#d95500; --quic:#3d3a42; --tcp:#a09a94;
+  --good:#2f7d55; --warn:#a8620a;
+  --shadow:0 1px 2px rgba(23,22,26,.05), 0 8px 24px -12px rgba(23,22,26,.18);
+  --display:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0b0d; --surface:#141417; --surface-2:#1b1b1f; --line:#2a2a30; --line-2:#3d3d45;
+    --ink:#eeecef; --ink-2:#c6c3c9; --muted:#918d97; --faint:#6a6670;
+    --accent:#ff7a1f; --accent-soft:#241505; --accent-line:#a8551f;
+    --echo:#ff7a1f; --quic:#d6d3d9; --tcp:#7c7680;
+    --good:#5fb98a; --warn:#e0a24a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0b0d; --surface:#141417; --surface-2:#1b1b1f; --line:#2a2a30; --line-2:#3d3d45;
+  --ink:#eeecef; --ink-2:#c6c3c9; --muted:#918d97; --faint:#6a6670;
+  --accent:#ff7a1f; --accent-soft:#241505; --accent-line:#a8551f;
+  --echo:#ff7a1f; --quic:#d6d3d9; --tcp:#7c7680;
+  --good:#5fb98a; --warn:#e0a24a;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);
+  font-size:16px;line-height:1.62;margin:0;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.shell{max-width:1080px;margin:0 auto;padding:0 28px 96px}
+.measure{max-width:68ch}
+
+/* ---------- masthead ---------- */
+header.top{padding:56px 0 30px;border-bottom:2px solid var(--ink);margin-bottom:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 16px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(46px,8vw,86px);line-height:.94;
+  letter-spacing:-.028em;margin:0 0 14px;text-wrap:balance}
+h1 .mark{color:var(--accent)}
+.standfirst{font-size:clamp(17px,2.1vw,20px);line-height:1.5;color:var(--ink-2);
+  max-width:60ch;margin:0 0 30px;font-weight:400}
+.metastrip{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);
+  border-left:1px solid var(--line)}
+.metastrip div{flex:1 1 150px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:11px 14px}
+.metastrip dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 3px}
+.metastrip dd{margin:0;font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500;
+  word-break:break-word}
+.metastrip dd a{color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor}
+
+/* ---------- sections ---------- */
+section{padding-top:56px}
+h2{font-family:var(--display);font-weight:600;font-size:clamp(25px,3.4vw,34px);line-height:1.14;
+  letter-spacing:-.018em;margin:0 0 6px;text-wrap:balance}
+.kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:9px}
+.kicker::after{content:"";height:1px;background:var(--line);flex:1}
+h3{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.008em;
+  margin:34px 0 8px}
+p{margin:0 0 16px}
+p.lede{font-size:17.5px;color:var(--ink-2);max-width:62ch}
+a{color:var(--accent)}
+strong{font-weight:600;color:var(--ink)}
+code,.m{font-family:var(--mono);font-size:.88em;background:var(--surface-2);
+  padding:1px 5px;border-radius:3px;border:1px solid var(--line)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{position:relative;padding-left:20px;margin-bottom:9px;max-width:68ch}
+ul li::before{content:"";position:absolute;left:2px;top:.66em;width:6px;height:1.5px;
+  background:var(--accent-line,var(--line-2))}
+
+/* ---------- equation ---------- */
+.equation{font-family:var(--mono);font-size:14px;line-height:1.9;background:var(--surface);
+  border:1px solid var(--line);border-left:3px solid var(--accent);padding:18px 22px;
+  margin:0 0 18px;overflow-x:auto;color:var(--ink-2)}
+.equation b{color:var(--accent);font-weight:600}
+
+/* ---------- tables ---------- */
+.tablewrap{overflow-x:auto;margin:0 0 8px;border:1px solid var(--line);background:var(--surface);
+  box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;background:var(--surface-2);white-space:nowrap;
+  border-bottom:1px solid var(--line-2)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+td.name{font-family:var(--mono);font-size:12.5px;color:var(--ink);white-space:nowrap}
+.win{color:var(--accent);font-weight:600}
+caption{caption-side:bottom;text-align:left;font-size:12.5px;color:var(--muted);
+  padding:10px 2px 0;line-height:1.5}
+
+/* ---------- agents ---------- */
+.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-bottom:8px}
+.agent{background:var(--surface);padding:14px 16px 16px}
+.agent .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.1em}
+.agent h4{font-family:var(--display);font-size:15px;font-weight:600;margin:2px 0 6px;
+  letter-spacing:-.005em}
+.agent p{font-size:13.5px;line-height:1.5;color:var(--ink-2);margin:0}
+.agent.built h4::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--accent);margin-left:7px;vertical-align:middle}
+.agent.planned{background:var(--surface-2)}
+.agent.planned h4{color:var(--muted)}
+.agent.planned p{color:var(--muted)}
+
+/* ---------- sequence ---------- */
+.seq{border:1px solid var(--line);background:var(--surface);margin-bottom:8px}
+.seq li{display:grid;grid-template-columns:34px 122px 1fr;gap:0 14px;padding:11px 16px;
+  border-bottom:1px solid var(--line);margin:0;max-width:none}
+.seq li::before{display:none}
+.seq li:last-child{border-bottom:0}
+.seq .step{font-family:var(--mono);font-size:11px;color:var(--faint);padding-top:2px}
+.seq .msg{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--accent);
+  padding-top:1px}
+.seq .what{font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+
+/* ---------- charts ---------- */
+figure{margin:0 0 8px}
+figcaption{font-size:12.5px;color:var(--muted);line-height:1.5;padding-top:10px;max-width:70ch}
+.panelgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line)}
+.panel{background:var(--surface);padding:15px 16px 17px}
+.panel .ptitle{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin-bottom:14px;line-height:1.4}
+.bars{display:flex;flex-direction:column;gap:11px}
+.barrow{display:grid;grid-template-columns:1fr;gap:4px}
+.barlab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font-size:11.5px;color:var(--muted)}
+.barlab b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;
+  font-weight:600;color:var(--ink)}
+.bartrack{height:9px;background:var(--surface-2);border:1px solid var(--line);position:relative}
+.barfill{height:100%;display:block}
+.barfill.echo{background:var(--echo)}
+.barfill.quic{background:var(--quic)}
+.barfill.tcp{background:var(--tcp)}
+.barrow.is-echo .barlab b{color:var(--accent)}
+
+.tl{background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
+.tlrow{border-bottom:1px solid var(--line);padding:12px 16px 6px;position:relative}
+.tlrow:last-child{border-bottom:0}
+.tlhead{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.tlname{font-family:var(--display);font-size:14px;font-weight:600}
+.tlmeta{font-family:var(--mono);font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.tl svg{display:block;width:100%;height:auto}
+.tlaxis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
+  color:var(--faint);padding:2px 16px 10px;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--muted);
+  padding:11px 16px;border-top:1px solid var(--line);background:var(--surface-2)}
+.legend span{display:flex;align-items:center;gap:7px}
+.swatch{width:14px;height:3px;display:inline-block}
+.swatch.band{height:11px;width:11px;background:var(--accent);opacity:.13;
+  outline:1px solid var(--accent);outline-offset:-1px}
+.swatch.tick{height:11px;width:2px;background:var(--warn)}
+
+/* ---------- callouts ---------- */
+.note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--surface);
+  padding:18px 22px;margin:0 0 18px}
+.note h4{font-family:var(--display);font-size:15px;font-weight:600;margin:0 0 8px}
+.note p:last-child{margin-bottom:0}
+.note.caution{border-left-color:var(--warn)}
+
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-bottom:8px}
+.split > div{background:var(--surface);padding:16px 18px 18px}
+.split h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  margin:0 0 10px;color:var(--faint);font-weight:600}
+.split p{font-size:13.5px;line-height:1.55;margin:0 0 10px;color:var(--ink-2)}
+.split p:last-child{margin:0}
+
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:var(--surface);
+  border:1px solid var(--line);padding:15px 18px;overflow-x:auto;margin:0 0 8px;
+  color:var(--ink-2)}
+pre .c{color:var(--faint)}
+
+figure.diagram{background:var(--surface);border:1px solid var(--line);padding:22px 18px 6px;
+  box-shadow:var(--shadow)}
+figure.diagram svg{display:block;width:100%;height:auto;max-width:840px;margin:0 auto;
+  color:var(--ink-2)}
+figure.diagram figcaption{padding:14px 4px 12px;margin:0 auto;max-width:840px}
+
+footer{margin-top:64px;padding-top:22px;border-top:2px solid var(--ink);
+  font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;
+  flex-wrap:wrap;gap:12px}
+footer .mono{font-family:var(--mono);font-size:11.5px}
+
+@media (max-width:640px){
+  .shell{padding:0 18px 64px}
+  .seq li{grid-template-columns:1fr;gap:3px}
+  .seq .step{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="shell">
+
+<header class="top">
+  <p class="eyebrow">Prototype report &middot; Advanced Technology Pioneers 2026 &middot; EDGE challenge</p>
+  <h1>ECHO<span class="mark">.</span></h1>
+  <p class="standfirst">Keeping a live AI inference session running &mdash; and fast &mdash; while
+    both the network underneath it and the nearest compute location change.</p>
+  <dl class="metastrip">
+    <div><dt>Repository</dt><dd><a href="https://github.com/KhadejaAhmedKZ/echo-edge-handoff">echo&#8209;edge&#8209;handoff</a></dd></div>
+    <div><dt>Status</dt><dd>Working prototype</dd></div>
+    <div><dt>Code</dt><dd>3,877 lines Python</dd></div>
+    <div><dt>Tests</dt><dd>22 passing</dd></div>
+    <div><dt>Transport</dt><dd>aioquic 1.3.0</dd></div>
+    <div><dt>Agents</dt><dd>9 built, 5 planned</dd></div>
+  </dl>
+</header>
+
+<section>
+  <p class="kicker">The problem</p>
+  <h2>&ldquo;The connection stayed alive&rdquo; is not the success criterion</h2>
+  <div class="measure">
+    <p class="lede">An inspection robot moving through a site is surrounded by several networks at
+      once: indoor Wi&#8209;Fi, private 5G, satellite, a wired dock. Today it uses one, waits for it
+      to break, and only then looks for another. By then the frame is late and the operator is
+      looking at the past.</p>
+    <p>Fixing the transport is not enough, and this is the part that is easy to miss. QUIC can
+      already carry a connection across a network change without dropping it. But if the compute
+      you are talking to is still the box you started with, you are now reaching a distant server
+      over a worse path. Nothing looks broken. Everything is slower.</p>
+    <p>What the operator actually feels is not one number but four, and every one of them moves
+      when the robot moves:</p>
+  </div>
+  <div class="equation">
+    end&#8209;to&#8209;end&nbsp;=&nbsp;<b>network round trip</b>&nbsp;+&nbsp;<b>queueing</b>&nbsp;+&nbsp;<b>inference time</b>&nbsp;+&nbsp;<b>response transit</b>
+  </div>
+  <div class="measure">
+    <p>So ECHO watches all four networks <em>and</em> all four edge sites continuously, predicts
+      which pair is about to be best, and migrates the live inference session there
+      <strong>before</strong> the current path degrades &mdash; with the old edge still serving
+      until the new one has proved it works.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">How it fits together</p>
+  <h2>One robot, four networks, four places to compute</h2>
+  <figure class="diagram">
+    <svg viewBox="0 0 840 330" role="img" aria-label="The robot's frames pass through a per-network impairment relay to one of four edge sites. The agent loop reads all four networks and all four edges, and drives the handoff that moves the session between edges.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
+        </marker>
+        <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,1 9,5 0,9" fill="#d95500"></polygon>
+        </marker>
+      </defs>
+
+      <!-- robot -->
+      <rect x="8" y="128" width="112" height="62" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+      <text x="64" y="152" text-anchor="middle" font-family="Archivo,sans-serif" font-size="13" font-weight="600" fill="currentColor">ROBOT-01</text>
+      <text x="64" y="170" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity=".7">20 frames/s</text>
+
+      <!-- relay -->
+      <rect x="176" y="112" width="128" height="94" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+      <text x="240" y="136" text-anchor="middle" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">impairment relay</text>
+      <text x="240" y="154" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">delay · jitter</text>
+      <text x="240" y="168" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">loss · bandwidth</text>
+      <text x="240" y="190" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".55">per source port</text>
+
+      <line x1="120" y1="159" x2="172" y2="159" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"></line>
+      <text x="146" y="150" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">QUIC</text>
+
+      <!-- edges -->
+      <g font-family="IBM Plex Mono,monospace" font-size="10">
+        <rect x="392" y="26" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
+        <text x="404" y="46" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">Edge A</text>
+        <text x="404" y="62" fill="currentColor" opacity=".7">indoor Wi-Fi · 26 ms</text>
+
+        <rect x="392" y="94" width="150" height="46" fill="none" stroke="#d95500" stroke-width="2"></rect>
+        <text x="404" y="114" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="#d95500">Edge B</text>
+        <text x="404" y="130" fill="currentColor" opacity=".7">private 5G · 21 ms</text>
+
+        <rect x="392" y="162" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5"></rect>
+        <text x="404" y="182" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor" opacity=".6">Edge C</text>
+        <text x="404" y="198" fill="currentColor" opacity=".45">satellite · 15 ms</text>
+
+        <rect x="392" y="230" width="150" height="46" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
+        <text x="404" y="250" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">Edge D</text>
+        <text x="404" y="266" fill="currentColor" opacity=".7">wired dock · 12 ms</text>
+      </g>
+
+      <line x1="304" y1="152" x2="388" y2="52" stroke="currentColor" stroke-width="1.2" opacity=".5" marker-end="url(#ar)"></line>
+      <line x1="304" y1="159" x2="388" y2="117" stroke="#d95500" stroke-width="2" marker-end="url(#ar-a)"></line>
+      <line x1="304" y1="166" x2="388" y2="185" stroke="currentColor" stroke-width="1.2" opacity=".3" marker-end="url(#ar)"></line>
+      <line x1="304" y1="173" x2="388" y2="253" stroke="currentColor" stroke-width="1.2" opacity=".5" marker-end="url(#ar)"></line>
+      <text x="352" y="106" font-family="IBM Plex Mono,monospace" font-size="9" fill="#d95500" font-weight="600">serving</text>
+
+      <!-- handoff arrow between edges -->
+      <path d="M 556 117 C 596 117 596 49 556 49" fill="none" stroke="#d95500" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ar-a)"></path>
+      <text x="612" y="86" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="#d95500" font-weight="600">session</text>
+      <text x="612" y="99" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="#d95500" font-weight="600">migrates</text>
+
+      <!-- agent loop -->
+      <rect x="176" y="248" width="366" height="58" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+      <text x="192" y="270" font-family="Archivo,sans-serif" font-size="12" font-weight="600" fill="currentColor">agent loop</text>
+      <text x="192" y="288" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="currentColor" opacity=".7">watch · predict · decide · orchestrate &#8212; every 250 ms</text>
+
+      <line x1="240" y1="244" x2="240" y2="210" stroke="currentColor" stroke-width="1.2" opacity=".8" marker-end="url(#ar)"></line>
+      <text x="150" y="232" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">reads all 4 links</text>
+      <line x1="466" y1="244" x2="466" y2="282" stroke="currentColor" stroke-width="1.2" opacity="0"></line>
+      <line x1="500" y1="248" x2="500" y2="212" stroke="currentColor" stroke-width="1.2" opacity=".8" marker-end="url(#ar)"></line>
+      <text x="556" y="232" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity=".75">reads all 4 edges</text>
+    </svg>
+    <figcaption>Every frame crosses an impairment relay that applies the current conditions of
+      whichever access network the robot is attached to. The agent loop samples all four links and
+      all four edges &mdash; including the ones nobody is using &mdash; and it is the only thing
+      that can move the session from one edge to another. Edge C is drawn faded because ECHO never
+      selected it: satellite is always available and still the wrong answer.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <p class="kicker">The agents</p>
+  <h2>Nine agents, each answering a different question</h2>
+  <p class="lede measure">Splitting these apart is not decoration. &ldquo;Which pair is best?&rdquo;
+    and &ldquo;should we move right now?&rdquo; are genuinely different questions, and conflating
+    them is how a system ends up thrashing on a correct ranking at the wrong moment.</p>
+  <div class="agents">
+    <div class="agent built"><p class="n">01</p><h4>Watcher</h4><p>What does every network and every edge look like right now &mdash; including the ones nobody is using? You cannot switch to a link you were not already watching.</p></div>
+    <div class="agent built"><p class="n">02</p><h4>Predictor</h4><p>Where is each one heading? EWMA level plus a least-squares slope over a 10&nbsp;s window, extrapolated 2&nbsp;s ahead.</p></div>
+    <div class="agent built"><p class="n">03</p><h4>Intent</h4><p>What is the robot doing? A call wants steadiness, a download wants throughput, live inference wants the lowest total time. Each gets a different weight vector.</p></div>
+    <div class="agent built"><p class="n">04</p><h4>Decision</h4><p>Which <em>(network, edge)</em> pair has the lowest predicted end&#8209;to&#8209;end cost? Scores all 16 pairs, with hysteresis so it does not oscillate.</p></div>
+    <div class="agent built"><p class="n">05</p><h4>Orchestrator</h4><p>Act on that now, or hold? Enforces one move at a time, a 3&nbsp;s cooldown, and Recovery's backoff &mdash; then picks the cheapest action that achieves the goal.</p></div>
+    <div class="agent built"><p class="n">06</p><h4>Handoff</h4><p>Runs the six&#8209;message sequence, early and reversibly. Nothing is discarded until the target acknowledges.</p></div>
+    <div class="agent built"><p class="n">07</p><h4>Recovery</h4><p>The handoff failed &mdash; stay, retry elsewhere, or cold&#8209;start? Backs off the edge that failed so it does not get an immediate second try.</p></div>
+    <div class="agent built"><p class="n">08</p><h4>Troubleshooter</h4><p>It feels bad and nothing switched. Why? Separates congestion, coverage, instability, loss, edge load and simply being compute&#8209;bound.</p></div>
+    <div class="agent built"><p class="n">09</p><h4>Explainer</h4><p>Says it in one sentence, generated from the same numbers the decision used, so the explanation cannot drift from the reason.</p></div>
+    <div class="agent planned"><p class="n">&mdash;</p><h4>Cost</h4><p>Planned. Avoid a metered link when a free one is comparable.</p></div>
+    <div class="agent planned"><p class="n">&mdash;</p><h4>Security</h4><p>Planned. Avoid untrusted networks such as open public Wi&#8209;Fi.</p></div>
+    <div class="agent planned"><p class="n">&mdash;</p><h4>Energy</h4><p>Planned. Balance battery against continuously probing four links.</p></div>
+    <div class="agent planned"><p class="n">&mdash;</p><h4>Policy</h4><p>Planned. Fixed rules, e.g. calls always get the most reliable option.</p></div>
+    <div class="agent planned"><p class="n">&mdash;</p><h4>Learning</h4><p>Planned. Remember that a link reliably degrades at a given time and prepare ahead of it.</p></div>
+  </div>
+  <p class="measure" style="margin-top:18px">The scoring function is over the <em>pair</em>, never the
+    network alone, and over <em>predicted</em> state rather than current:</p>
+  <div class="equation">
+score = w&#8321;&middot;predicted_path_rtt + w&#8322;&middot;predicted_jitter + w&#8323;&middot;predicted_loss<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ w&#8324;&middot;predicted_inference_ms + w&#8325;&middot;edge_load + w&#8326;&middot;proximity_cost
+  </div>
+  <p class="measure">The weights come from the Intent Agent. A challenger must beat the incumbent by
+    <strong>12%</strong> for <strong>3 consecutive ticks</strong> before a handoff is authorised
+    &mdash; unless the current path is already unreachable, in which case hysteresis is skipped.</p>
+</section>
+
+<section>
+  <p class="kicker">The protocol</p>
+  <h2>What actually crosses during a handoff</h2>
+  <p class="lede measure">The model is already resident on every edge. Only the live session
+    travels, which is why a handoff costs milliseconds instead of a model download.</p>
+  <ol class="seq">
+    <li><span class="step">01</span><span class="msg">PREPARE</span><span class="what">Target allocates resources for the session. No model transfer &mdash; it is already there.</span></li>
+    <li><span class="step">02</span><span class="msg">STATE</span><span class="what">Session id, model id and version, last processed frame, state version, and the object&#8209;tracking state cross the wire. Roughly 300 bytes.</span></li>
+    <li><span class="step">03</span><span class="msg">READY</span><span class="what">Target confirms it reconstructed the session. Because state arrived, it carries no cold&#8209;start penalty.</span></li>
+    <li><span class="step">04</span><span class="msg">VERIFY</span><span class="what">Target infers one duplicate frame. A broken target is caught <em>before</em> commit, while the old edge is still serving.</span></li>
+    <li><span class="step">05</span><span class="msg">COMMIT</span><span class="what">Target becomes the active inference server. Only now does the client stop sending to the old edge.</span></li>
+    <li><span class="step">06</span><span class="msg">DRAIN</span><span class="what">Old edge finishes outstanding work and accepts no more. Its connection is closed on a delay so in&#8209;flight frames still land.</span></li>
+  </ol>
+  <p class="measure" style="margin-top:20px">Two properties make this safe rather than merely fast.
+    It <strong>starts early</strong>, triggered by the Predictor's trend rather than by a failure.
+    And <strong>nothing is discarded until the target acknowledges</strong>, so a failed handoff
+    costs one wasted attempt and the session never leaves the old edge.</p>
+
+  <h3>Measured phase timings, all four handoffs</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Move</th><th>Over</th><th class="num">Prepare</th><th class="num">State</th><th class="num">Verify</th><th class="num">Commit</th><th class="num">Total</th><th class="num">State size</th></tr></thead>
+      <tbody>
+        <tr><td class="name">A &rarr; B</td><td class="name">private 5G</td><td class="num">373.4</td><td class="num">97.5</td><td class="num">86.1</td><td class="num">56.6</td><td class="num">614.2</td><td class="num">300 B</td></tr>
+        <tr><td class="name">B &rarr; A</td><td class="name">indoor Wi&#8209;Fi</td><td class="num">139.5</td><td class="num">15.5</td><td class="num">45.5</td><td class="num">19.5</td><td class="num">220.6</td><td class="num">301 B</td></tr>
+        <tr><td class="name">A &rarr; B</td><td class="name">private 5G</td><td class="num">246.5</td><td class="num">31.9</td><td class="num">51.4</td><td class="num">24.1</td><td class="num">354.2</td><td class="num">302 B</td></tr>
+        <tr><td class="name">B &rarr; D</td><td class="name">wired dock</td><td class="num">39.4</td><td class="num">10.5</td><td class="num">19.9</td><td class="num">6.7</td><td class="num">76.8</td><td class="num">303 B</td></tr>
+      </tbody>
+    </table>
+    <caption>All values in milliseconds. <strong>Prepare dominates</strong> because it includes
+      opening a standby QUIC connection to the target over an impaired link &mdash; which is
+      precisely why it is done ahead of time, while the old edge is still serving. The whole
+      experiment moved <strong>1,206 bytes</strong> of session state in total.</caption>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Method</p>
+  <h2>What is held identical across the three experiments</h2>
+  <p class="lede measure">The only thing that varies between the three runs is the client's decision
+    logic &mdash; one branch in <code>client.py</code>. Everything else is the same code path.</p>
+  <div class="split">
+    <div>
+      <h4>Held constant</h4>
+      <p>Same route and timing, same four network profiles, same random seed, same 90&nbsp;s
+        duration, same 20&nbsp;fps workload, same four edge servers, same simulated inference cost,
+        same measurement code.</p>
+      <p>The zone&#8209;crossing windows used for scoring are fixed positions on the route, identical
+        for every mode, so a mode cannot improve its score by declaring fewer transitions.</p>
+    </div>
+    <div>
+      <h4>What varies</h4>
+      <p><strong>TCP.</strong> No migration, no prediction. React after the break, reconnect,
+        rebuild the session from nothing.</p>
+      <p><strong>QUIC only.</strong> The connection survives a network change, but the compute never
+        moves. The interesting baseline, because nothing looks broken.</p>
+      <p><strong>QUIC + ECHO.</strong> The full agent stack.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Results</p>
+  <h2>90 seconds, 1,799 frames, one seed</h2>
+
+  <div class="panelgrid" id="panels"></div>
+  <p style="font-size:12.5px;color:var(--muted);padding-top:10px;max-width:70ch;line-height:1.5">
+    Four measures, four scales &mdash; each panel is drawn against its own maximum, so bar lengths
+    are comparable within a panel and not across them. Lower is better in all four.</p>
+
+  <h3>Where the latency actually went</h3>
+  <figure>
+    <div class="tl" id="timeline"></div>
+    <figcaption>95th&#8209;percentile end&#8209;to&#8209;end inference latency per 0.75&nbsp;s bucket,
+      all three drawn on the same 0&ndash;950&nbsp;ms scale. Shaded bands are the fixed
+      zone&#8209;crossing windows; ticks below the axis mark lost frames. TCP's single reconnect at
+      44.6&nbsp;s is the visible cliff; QUIC&#8209;only's spike at the first crossing is its
+      migration landing while it is still talking to a distant Edge&nbsp;A.</figcaption>
+  </figure>
+
+  <h3>The full table</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Measure</th><th class="num">TCP baseline</th><th class="num">QUIC only</th><th class="num">QUIC + ECHO</th></tr></thead>
+      <tbody>
+        <tr><td>p95 end-to-end latency</td><td class="num">510.6 ms</td><td class="num">186.2 ms</td><td class="num win">134.5 ms</td></tr>
+        <tr><td>Median latency</td><td class="num">200.3 ms</td><td class="num">102.5 ms</td><td class="num win">62.1 ms</td></tr>
+        <tr><td>p99 latency</td><td class="num">594.6 ms</td><td class="num">373.0 ms</td><td class="num win">165.4 ms</td></tr>
+        <tr><td>Worst single frame</td><td class="num">672.0 ms</td><td class="num">979.7 ms</td><td class="num win">343.2 ms</td></tr>
+        <tr><td>Frames lost</td><td class="num">11</td><td class="num">0</td><td class="num win">0</td></tr>
+        <tr><td>Longest gap with no result</td><td class="num">220.2 ms</td><td class="num">803.4 ms</td><td class="num win">159.7 ms</td></tr>
+        <tr><td>Time on a suboptimal edge</td><td class="num">44.5 s</td><td class="num">70.8 s</td><td class="num win">6.8 s</td></tr>
+        <tr><td>Reconnects</td><td class="num">1</td><td class="num">0</td><td class="num win">0</td></tr>
+        <tr><td>Successful handoffs</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num win">4</td></tr>
+        <tr><td>Failed handoffs</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num win">0</td></tr>
+        <tr><td>Inference latency gap</td><td class="num">38.9 ms</td><td class="num">40.0 ms</td><td class="num win">14.8 ms</td></tr>
+      </tbody>
+    </table>
+    <caption>Inference latency gap = p95 while crossing zones &minus; p95 while settled.
+      Seed 7. Full per&#8209;frame data is in <code>results/</code> in the repository.</caption>
+  </div>
+
+  <div class="note" style="margin-top:26px">
+    <h4>Reading this honestly</h4>
+    <p><strong>This is one run at one seed.</strong> Most columns are stable across seeds. One is
+      not: QUIC&#8209;only's inference latency gap has measured anywhere from 3&nbsp;ms to 40&nbsp;ms
+      across runs, because it depends on exactly when its migration lands relative to a crossing
+      window. A judge who re-runs this with a different seed will see a different number there, and
+      that is expected.</p>
+    <p>When that figure comes out low, it is not QUIC&#8209;only doing well. It is QUIC&#8209;only
+      being <em>uniformly</em> worse: holding a connection to an edge it should have left, so its
+      settled latency is already high and a zone crossing barely moves it. Measured against itself
+      it looks stable. Measured against what the robot should have been getting, it spends
+      <strong>71 of 90 seconds on the wrong edge</strong>.</p>
+    <p>So the gap metric is not the argument on its own &mdash; it is only meaningful beside the
+      absolute numbers. ECHO has the lowest p95, the lowest median, the lowest p99, the shortest
+      freeze, no losses and no reconnects, and 6.8&nbsp;s on a suboptimal edge instead of 71
+      &mdash; while performing four live session migrations.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Credibility</p>
+  <h2>What is real, what is emulated, what is simulated</h2>
+  <p class="lede measure">Stated plainly, because it is the first thing a judge should ask, and
+    because a prototype that overstates itself is worth less than one that does not.</p>
+  <div class="split">
+    <div>
+      <h4>Real</h4>
+      <p>The QUIC stack (<code>aioquic</code>), the TLS handshake, and connection migration across a
+        genuinely different four&#8209;tuple &mdash; same connection ID, server&#8209;side path
+        validation, no new handshake.</p>
+      <p>All four edge sites as independent services speaking the full ECHO message set over both
+        QUIC and TCP. Real UDP and TCP sockets. Every latency figure measured end&#8209;to&#8209;end
+        from the client, not modelled.</p>
+    </div>
+    <div>
+      <h4>Emulated</h4>
+      <p>The link conditions. Delay, jitter, loss and bandwidth are applied by relays sitting
+        between client and edge, driven by a coverage model &mdash; which is what
+        <code>tc</code>/<code>netem</code> does, moved into userspace so the whole thing runs on one
+        laptop of any OS.</p>
+      <p>The relay identifies which network a packet belongs to by the client's source port, which
+        is also what makes migration observable. On Linux the same numbers can drive real
+        <code>tc</code> qdiscs across namespaces; nothing else changes.</p>
+    </div>
+    <div>
+      <h4>Simulated</h4>
+      <p>The inference itself &mdash; a controlled delay that responds to edge load and to whether
+        the session was warm&#8209;started from transferred state or rebuilt cold.</p>
+      <p>What this project measures is end&#8209;to&#8209;end inference latency and session
+        continuity across a handoff, not the accuracy of a detector. Swapping in a real YOLO forward
+        pass means replacing one method, <code>EdgeService._infer</code>, and nothing else.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Limitations</p>
+  <h2>What I would fix next, and why</h2>
+
+  <div class="note caution">
+    <h4>Two of the four handoffs were probably unnecessary</h4>
+    <p>The session moved A&rarr;B at 2.1&nbsp;s, back B&rarr;A at 5.9&nbsp;s, then A&rarr;B again at
+      21.0&nbsp;s &mdash; all while the robot was still in Zone&nbsp;A. After that it was stable:
+      Edge&nbsp;B until 73.1&nbsp;s, then Edge&nbsp;D at the dock.</p>
+    <p>The cause is that the Predictor's window is still filling in the first few seconds, so its
+      trend estimate is noisy, and Edge&nbsp;A and Edge&nbsp;B genuinely score close together in
+      Zone&nbsp;A. Hysteresis and the Orchestrator's cooldown limited the thrash but did not
+      eliminate it. <strong>The fix is a warmup gate</strong> &mdash; the Orchestrator should refuse
+      to authorise a move until the Watcher holds a minimum number of samples. That is a small
+      change and it is the first thing I would do.</p>
+  </div>
+
+  <ul>
+    <li><strong>Edge health is read in&#8209;process, not probed over the wire.</strong> The Watcher
+      calls each edge's <code>health()</code> directly rather than sending an ECHO_METRICS probe
+      through the relay. That is a control&#8209;plane shortcut; it keeps the focus on the handoff,
+      but it means edge health carries no measured probe latency.</li>
+    <li><strong>All four edges are asyncio tasks in one process.</strong> They are independent
+      services with independent state, but they share a CPU, so the simulated inference cost is more
+      trustworthy than a real one would be under contention.</li>
+    <li><strong>TCP loss is modelled as retransmission delay, not dropped bytes.</strong> Dropping
+      bytes from a stream would corrupt it; real TCP turns loss into delay anyway. The baseline is
+      still a competently written pipelined client, not a straw man.</li>
+    <li><strong>Single&#8209;seed results.</strong> A proper evaluation would run each mode across
+      many seeds and report distributions rather than one number per cell.</li>
+    <li><strong>The preload buffer is decided but not yet exercised.</strong> The Intent Agent
+      correctly identifies live traffic as unbufferable and reports how much it would pre&#8209;fetch
+      for non&#8209;live traffic, but the robot workload is live, so the buffer never engages in
+      these runs.</li>
+    <li><strong>Five agents are designed but not built</strong> &mdash; Cost, Security, Energy,
+      Policy and Learning. The weight vector in <code>config.py</code> is the seam they plug into.</li>
+  </ul>
+</section>
+
+<section>
+  <p class="kicker">Running it</p>
+  <h2>Everything is in the project folder</h2>
+  <p class="measure">Nothing is installed outside it. Deleting the folder removes every trace.</p>
+<pre><span class="c"># set up</span>
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
+
+<span class="c"># run all three experiments and rebuild the figures</span>
+.venv/bin/python scripts/run_experiments.py --duration 90 --seed 7
+.venv/bin/python scripts/plot_results.py
+
+<span class="c"># watch it live in 3D at http://127.0.0.1:8080</span>
+.venv/bin/python dashboard/server.py
+
+<span class="c"># tests</span>
+.venv/bin/python -m pytest -q</pre>
+  <p class="measure" style="margin-top:20px">The dashboard is a third&#8209;person 3D view of the
+    robot walking the route, with all four networks and all six characteristics each, all four edge
+    sites, the nine&#8209;agent pipeline showing what every agent currently believes, and a
+    plain&#8209;language line explaining each decision as it is made. The browser is fed the same
+    event stream the log file records, so what is on screen and what the numbers say cannot
+    disagree.</p>
+</section>
+
+<footer>
+  <span>ECHO &mdash; Edge Compute Handoff Orchestration</span>
+  <span class="mono">4 commits &middot; 22 tests &middot; seed 7 &middot; aioquic 1.3.0</span>
+</footer>
+
+</div>
+
+<script>
+const D = {"tcp":{"p95":[121,137,129,115,51,105,134,70,57,61,68,51,53,86,50,53,51,55,51,69,53,60,59,52,78,78,62,95,98,152,126,259,350,324,299,367,331,328,281,209,278,271,310,330,437,473,559,635,622,587,579,561,523,537,500,585,600,615,669,130,67,81,77,73,94,115,107,66,59,66,75,106,122,125,167,160,129,135,174,156,112,128,204,241,234,246,260,261,290,313,252,284,255,291,319,297,316,311,369,300,320,309,305,272,314,283,276,278,263,320,285,284,322,331,276,283,272,287,292,317],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[44.6,44.6]]},"quic":{"p95":[127,108,134,70,63,118,76,52,56,79,49,67,76,52,53,50,49,62,51,54,53,49,60,51,71,55,98,93,107,163,210,358,151,200,282,118,103,154,171,257,138,135,139,139,113,138,143,128,117,108,111,117,116,125,150,118,106,109,111,108,118,121,139,107,106,121,128,110,109,137,156,157,160,174,178,179,193,326,162,237,208,171,241,326,200,185,177,325,249,345,200,240,186,345,249,415,944,361,86,85,85,87,82,87,87,84,85,81,85,84,85,83,88,85,86,83,86,83,83,89],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[23.8,24.3],[25.6,26.1],[29.5,30.0],[72.3,72.8]]},"echo":{"p95":[129,118,117,108,110,105,110,93,49,64,59,59,110,56,50,53,50,64,53,62,52,52,61,56,64,68,97,100,97,81,119,184,108,118,97,97,75,71,103,74,86,94,122,87,67,81,95,76,61,58,67,70,68,79,95,86,57,54,56,58,72,70,83,82,57,61,78,71,56,73,211,146,109,118,131,151,141,136,242,127,176,124,135,154,223,143,147,213,151,148,143,171,145,257,145,197,154,137,27,30,25,21,23,22,24,23,24,22,24,24,23,23,22,24,25,23,23,23,27,24],"lost":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"windows":[[1.4,2.0],[5.6,5.9],[20.6,21.0],[73.0,73.1]]},"crossings":[[23.4,41.4],[50.4,66.6],[70.2,84.6]]};
+
+const CSS = getComputedStyle(document.documentElement);
+const MODES = [
+  {k:'echo', name:'QUIC + ECHO', cls:'echo'},
+  {k:'quic', name:'QUIC only',   cls:'quic'},
+  {k:'tcp',  name:'TCP baseline',cls:'tcp'},
+];
+
+/* ---- small multiples: four measures, four scales ---- */
+const PANELS = [
+  {t:'p95 end-to-end latency', u:'ms', v:{tcp:510.6, quic:186.2, echo:134.5}, d:1},
+  {t:'Median latency', u:'ms', v:{tcp:200.3, quic:102.5, echo:62.1}, d:1},
+  {t:'Longest gap with no result', u:'ms', v:{tcp:220.2, quic:803.4, echo:159.7}, d:1},
+  {t:'Time on a suboptimal edge', u:'s', v:{tcp:44.5, quic:70.8, echo:6.8}, d:1},
+];
+
+document.getElementById('panels').innerHTML = PANELS.map(p => {
+  const max = Math.max(...Object.values(p.v));
+  const rows = MODES.map(m => {
+    const val = p.v[m.k];
+    const w = (val / max * 100).toFixed(1);
+    return `<div class="barrow ${m.k === 'echo' ? 'is-echo' : ''}">
+        <div class="barlab"><span>${m.name}</span><b>${val.toFixed(p.d)}${p.u}</b></div>
+        <div class="bartrack" title="${m.name}: ${val.toFixed(p.d)} ${p.u}">
+          <span class="barfill ${m.cls}" style="width:${w}%"></span></div>
+      </div>`;
+  }).join('');
+  return `<div class="panel"><p class="ptitle">${p.t}</p><div class="bars">${rows}</div></div>`;
+}).join('');
+
+/* ---- timeline: three panels, one shared scale ---- */
+const W = 1000, H = 96, PAD_B = 12, YMAX = 950, DUR = 90;
+const xAt = i => (i / (D.echo.p95.length - 1)) * W;
+const yAt = v => H - PAD_B - (Math.min(v, YMAX) / YMAX) * (H - PAD_B - 4);
+
+function panel(m){
+  const s = D[m.k];
+  const pts = [];
+  s.p95.forEach((v, i) => { if (v != null) pts.push(`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`); });
+
+  const bands = D.crossings.map(c =>
+    `<rect x="${(c[0]/DUR*W).toFixed(1)}" y="0" width="${((c[1]-c[0])/DUR*W).toFixed(1)}" height="${H-PAD_B}" fill="currentColor" opacity="0.06"></rect>`
+  ).join('');
+
+  const grid = [250, 500, 750].map(g =>
+    `<line x1="0" y1="${yAt(g).toFixed(1)}" x2="${W}" y2="${yAt(g).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.12"></line>
+     <text x="4" y="${(yAt(g)-3).toFixed(1)}" font-family="IBM Plex Mono,monospace" font-size="9" fill="currentColor" opacity="0.45">${g}</text>`
+  ).join('');
+
+  const ticks = s.lost.map((n, i) => n > 0
+    ? `<line x1="${xAt(i).toFixed(1)}" y1="${H-PAD_B}" x2="${xAt(i).toFixed(1)}" y2="${H-2}" stroke="var(--warn)" stroke-width="2.5"></line>` : ''
+  ).join('');
+
+  const colour = m.k === 'echo' ? 'var(--echo)' : m.k === 'quic' ? 'var(--quic)' : 'var(--tcp)';
+  const lost = s.lost.reduce((a, b) => a + b, 0);
+  const peak = Math.max(...s.p95.filter(v => v != null));
+
+  return `<div class="tlrow">
+    <div class="tlhead"><span class="tlname">${m.name}</span>
+      <span class="tlmeta">peak ${peak} ms &middot; ${lost} frame${lost === 1 ? '' : 's'} lost</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+         aria-label="${m.name}: 95th percentile latency over the 90 second route, peaking at ${peak} milliseconds, with ${lost} frames lost.">
+      ${bands}${grid}
+      <line x1="0" y1="${H-PAD_B}" x2="${W}" y2="${H-PAD_B}" stroke="currentColor" stroke-width="1" opacity="0.28"></line>
+      <polyline points="${pts.join(' ')}" fill="none" stroke="${colour}" stroke-width="2"
+                stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+      ${ticks}
+    </svg>
+  </div>`;
+}
+
+document.getElementById('timeline').innerHTML =
+  MODES.map(panel).join('') +
+  `<div class="tlaxis"><span>0 s</span><span>Zone A / B</span><span>Zone B / C</span><span>Zone C / D</span><span>90 s</span></div>
+   <div class="legend">
+     <span><i class="swatch band"></i>zone crossing window</span>
+     <span><i class="swatch tick"></i>lost frame</span>
+     <span><i class="swatch" style="background:var(--echo)"></i>QUIC + ECHO</span>
+     <span><i class="swatch" style="background:var(--quic)"></i>QUIC only</span>
+     <span><i class="swatch" style="background:var(--tcp)"></i>TCP baseline</span>
+   </div>`;
+</script>
+
+</body>
+</html>

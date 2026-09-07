@@ -2,6 +2,9 @@
 
 **Advanced Technology Pioneers 2026 · EDGE challenge prototype**
 
+**[▶ Watch the simulation](https://khadejaahmedkz.github.io/echo-edge-handoff/)**
+ · [Read the report](https://khadejaahmedkz.github.io/echo-edge-handoff/report.html)
+
 Keeping a live AI inference session running — and *fast* — while both the
 network underneath it and the nearest compute location change.
 
@@ -65,6 +68,12 @@ Run all three experiments and produce the figures:
 ```bash
 .venv/bin/python scripts/run_experiments.py --duration 90 --seed 7
 .venv/bin/python scripts/plot_results.py
+```
+
+Rebuild the shareable static site from the recorded runs:
+
+```bash
+python3 scripts/build_pages.py
 ```
 
 Watch it live in 3D:
