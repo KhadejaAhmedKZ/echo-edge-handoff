@@ -26,6 +26,8 @@ from .agents.decision import Candidate, DecisionEngine
 from .agents.explainer import Explainer
 from .agents.handoff import HandoffManager
 from .agents.intent import IntentAgent
+from .agents.orchestrator import (HANDOFF, HOLD, MIGRATE_PATH,
+                                  Orchestrator)
 from .agents.predictor import Predictor
 from .agents.recovery import COLD_START, RETRY_ELSEWHERE, RecoveryAgent
 from .agents.troubleshooter import Troubleshooter
@@ -58,6 +60,10 @@ class EchoController:
         self.explainer = Explainer()
         self.handoff = HandoffManager(transport, cfg, telemetry, self.explainer)
         self.recovery = RecoveryAgent(self.watcher, self.decision)
+        # The Orchestrator owns the cycle: it turns the Decision Engine's
+        # ranking into an action, or into a reasoned refusal to act.
+        self.orchestrator = Orchestrator(self.decision, self.handoff,
+                                         self.recovery, self.intent)
 
         self.metrics = RunMetrics(mode=cfg.mode)
         self.state = P.SessionState(session_id=cfg.session_id,
@@ -299,31 +305,36 @@ class EchoController:
     # --- echo -------------------------------------------------------------
 
     async def _decide_echo(self, t: float) -> None:
-        if self.handoff.state not in ("STABLE",):
-            return
         network_id, edge_id = self.current_pair()
-        current, challenger, reason = self.decision.evaluate(network_id, edge_id)
 
-        self.last_reason = reason
+        # The Orchestrator runs the cycle and picks the cheapest sufficient
+        # action, or holds with a reason. Everything below just carries it out.
+        action, current = self.orchestrator.plan(network_id, edge_id)
+        self.last_reason = action.reason
 
-        if challenger is None:
+        if action.kind == HOLD:
             diag = self.troubleshooter.diagnose(current)
             self.last_diagnosis = diag
             self.telemetry.emit("diagnosis", **diag)
-            if diag["cause"] == "healthy":
-                self._explain(self.explainer.why_stay(current, reason))
+            if action.veto:
+                self.telemetry.emit("orchestrator_hold", reason=action.reason,
+                                    veto=action.veto)
+                self._explain(f"Holding. {action.reason.capitalize()}.")
+            elif diag["cause"] == "healthy":
+                self._explain(self.explainer.why_stay(current, action.reason))
             else:
                 self._explain(self.explainer.trouble(diag))
             return
 
-        if self.recovery.is_blocked(challenger.edge_id):
-            return
+        challenger = action.target
+        reason = action.reason
 
-        # Same compute, different path: that is a transport-level move only,
-        # and QUIC does it without any session work at all.
-        if challenger.edge_id == edge_id and challenger.network_id != network_id:
+        # Same compute, different path: a transport-level move only, which QUIC
+        # does without any session work at all.
+        if action.kind == MIGRATE_PATH:
             start = self.now()
             if await self.transport.migrate_primary(challenger.network_id):
+                self.orchestrator.note_move()
                 self.metrics.mark_handoff_window(start, self.now() + 0.3)
                 self._explain(
                     f"Staying on {EDGES[edge_id].label} but moving the path to "
@@ -344,6 +355,7 @@ class EchoController:
         self.metrics.mark_handoff_window(start, self.now())
 
         self.last_handoff_ms = result.total_ms
+        self.orchestrator.note_move()
         if result.ok:
             self.metrics.handoffs.append(result.as_dict())
             self.metrics.state_bytes += result.state_bytes
@@ -413,6 +425,7 @@ class EchoController:
                 "patience": self.cfg.switch_patience,
                 "streaks": self.decision.streak_view,
             },
+            "orchestrator": self.orchestrator.snapshot(),
             "handoff": {
                 "state": self.handoff.state,
                 "completed": len(self.metrics.handoffs),

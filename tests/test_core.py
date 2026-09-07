@@ -226,3 +226,70 @@ def test_longest_gap_finds_the_visible_freeze():
     for sent, recv in [(0.0, 0.0), (0.1, 0.1), (0.2, 1.4), (1.5, 1.5)]:
         m.add(FrameRecord(1, sent, recv, 50.0, 10.0, "A", "wifi"))
     assert round(m.longest_gap_ms()) == 1300
+
+
+# -- orchestrator ----------------------------------------------------------
+
+class _StubHandoff:
+    def __init__(self, state="STABLE"):
+        self.state = state
+
+
+def _orchestrator(position: float, handoff_state="STABLE"):
+    from echo_sim.agents.handoff import STABLE  # noqa: F401
+    from echo_sim.agents.orchestrator import Orchestrator
+    from echo_sim.agents.recovery import RecoveryAgent
+
+    engine, watcher = _engine(position)
+    handoff = _StubHandoff(handoff_state)
+    recovery = RecoveryAgent(watcher, engine)
+    orch = Orchestrator(engine, handoff, recovery, IntentAgent("inference"),
+                        cooldown_s=3.0)
+    return orch, engine, recovery
+
+
+def test_orchestrator_refuses_a_second_move_while_one_is_in_flight():
+    from echo_sim.agents.orchestrator import HOLD
+    orch, _, _ = _orchestrator(0.95, handoff_state="TRANSFERRING")
+    action, _ = orch.plan("wifi", "A")          # wifi is dead at the dock
+    assert action.kind == HOLD
+    assert "already in flight" in action.reason
+
+
+def test_orchestrator_respects_recovery_backoff():
+    from echo_sim.agents.orchestrator import HOLD
+    orch, engine, recovery = _orchestrator(0.95)
+    best = engine.best()
+    recovery.block(best.edge_id, 30.0)
+    action, _ = orch.plan("wifi", "A")
+    assert action.kind == HOLD
+    assert action.veto.startswith("blocked:")
+
+
+def test_orchestrator_cooldown_does_not_strand_a_dead_path():
+    """Cooling down is a preference; being unreachable is not."""
+    from echo_sim.agents.orchestrator import HANDOFF
+    orch, _, _ = _orchestrator(0.95)
+    orch.note_move()                            # start the cooldown
+    assert orch.cooldown_left_s > 0
+    action, current = orch.plan("wifi", "A")    # wifi has no coverage here
+    assert not current.reachable
+    assert action.kind == HANDOFF
+
+
+def test_orchestrator_prefers_a_path_migration_over_moving_compute():
+    from echo_sim.agents.orchestrator import MIGRATE_PATH
+    from echo_sim.agents.decision import Candidate
+    orch, engine, _ = _orchestrator(0.05)
+
+    best = engine.best()
+    # Force a challenger on the same edge but a different network.
+    other = "cellular" if best.network_id != "cellular" else "wifi"
+    engine.evaluate = lambda n, e: (                      # type: ignore[assignment]
+        engine.current_candidate(n, e),
+        Candidate(best.edge_id, other, 1.0, 10, 1, 0.0, 10, .2, 20),
+        "forced",
+    )
+    action, _ = orch.plan(best.network_id, best.edge_id)
+    assert action.kind == MIGRATE_PATH
+    assert action.target.edge_id == best.edge_id
