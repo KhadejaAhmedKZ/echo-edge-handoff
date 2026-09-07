@@ -137,14 +137,23 @@ REPLAY_TRANSPORT = """/* Static build: there is no backend here. This page repla
    dashboard uses, so what you see is what the run produced. */
 const REC = {};
 let raf = null, cursor = 0, startedAt = 0, current = null, loading = false;
+let userStopped = false, loopTimer = null;
 
 function halt(){
   if (raf) cancelAnimationFrame(raf);
-  raf = null; S.running = false;
+  if (loopTimer) clearTimeout(loopTimer);
+  raf = null; loopTimer = null; S.running = false;
+}
+
+function restart(events){
+  cursor = 0;
+  el('log').innerHTML = ''; S.hist = []; drawSpark();
+  drive(events, 0);
 }
 
 function drive(events, from){
   halt();
+  userStopped = false;
   cursor = from;
   const base = events.length ? events[0].t : 0;
   const offset = events[from] ? events[from].t - base : 0;
@@ -156,7 +165,14 @@ function drive(events, from){
       handle(events[cursor++]);
     }
     if (cursor < events.length){ raf = requestAnimationFrame(tick); }
-    else { S.running = false; raf = null; setPlay(false); }
+    else {
+      // Loop, so the page keeps showing the run rather than freezing on its
+      // last frame for anyone who arrives mid-way through.
+      S.running = false; raf = null; setPlay(false);
+      loopTimer = setTimeout(() => {
+        if (!userStopped && !raf) restart(events);
+      }, 2200);
+    }
   }
   raf = requestAnimationFrame(tick);
   setPlay(true);
@@ -198,20 +214,20 @@ async function selectMode(m, autoplay){
 const send = o => {
   if (o.cmd === 'start'){
     if (loading) return;
-    if (raf){ halt(); setPlay(false); return; }      // Pause
-    if (current) drive(current, cursor);             // Play or Resume
+    if (raf){ halt(); userStopped = true; setPlay(false); return; }   // Pause
+    if (current) drive(current, cursor);                              // Play or Resume
   } else if (o.cmd === 'stop'){
-    halt(); setPlay(false);
+    halt(); userStopped = true; setPlay(false);
   } else if (o.cmd === 'replay'){
-    if (current) drive(current, 0);
+    if (current) restart(current);
   }
 };"""
 
 LIVE_BOOT = "connect(); drawSpark();"
-REPLAY_BOOT = "drawSpark(); selectMode(mode, false);"
+REPLAY_BOOT = "drawSpark(); selectMode(mode, true);"
 
 LIVE_MODE_HANDLER = """    b.classList.add('on'); mode = b.dataset.mode;"""
-REPLAY_MODE_HANDLER = """    b.classList.add('on'); mode = b.dataset.mode; selectMode(mode, false);"""
+REPLAY_MODE_HANDLER = """    b.classList.add('on'); mode = b.dataset.mode; selectMode(mode, true);"""
 
 BANNER = """<div class="recbanner">
   <span class="dot"></span>
