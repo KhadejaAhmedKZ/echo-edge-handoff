@@ -558,6 +558,65 @@ SHIM = r"""/* Static build shim - GitHub Pages has no backend.
   window.WebSocket.CONNECTING = 0; window.WebSocket.OPEN = 1;
   window.WebSocket.CLOSING = 2; window.WebSocket.CLOSED = 3;
 
+  /* ---- transport controls on the published build ----------------------
+   * "Run live experiment" streamed events like a live run, and a live run has
+   * no speed control, so on the published site it played 90 seconds at 1x with
+   * no pause, scrub or speed. Nothing here can compute a live run anyway, so
+   * the button is pointed at the page's own replay engine instead, which gives
+   * the full transport for free - and relabelled, because a page that cannot
+   * run anything live should not say that it does.
+   */
+
+  function pickFor(scenario, mode) {
+    if (!M) return null;
+    if (M.replayable[scenario + "|" + mode]) return M.replayable[scenario + "|" + mode];
+    for (var k in M.replayable) {               // same controller, nearest scenario
+      if (k.split("|")[1] === mode) return M.replayable[k];
+    }
+    return M.full_runs && M.full_runs[0] || null;
+  }
+
+  function rewire() {
+    if (typeof window.replay !== "function") return false;
+    var start = document.getElementById("btnStart");
+    var introLive = document.getElementById("btnIntroLive");
+    var compare = document.getElementById("btnCompare");
+    var scen = document.getElementById("selScenario");
+    var mode = document.getElementById("selMode");
+    if (!start || !scen || !mode) return false;
+
+    function play() {
+      var rid = pickFor(scen.value, mode.value);
+      if (rid) window.replay(rid);
+      else alert("No recorded run for that combination in this build.");
+    }
+
+    start.textContent = "Play this combination";
+    start.title = "Plays the recorded run for the chosen scenario and controller, "
+                + "with pause, scrub and speed. This page has no backend, so no "
+                + "new run can be computed here.";
+    start.onclick = play;
+
+    if (introLive) {
+      introLive.textContent = "Play a recorded run (about 90 s)";
+      introLive.onclick = play;
+    }
+    if (compare) {
+      compare.disabled = true;
+      compare.title = "Running four controllers means computing four new runs, "
+                    + "which needs the backend. The finished comparisons are in "
+                    + "the comparison panel below.";
+    }
+    return true;
+  }
+
+  manifest().then(function () {
+    var tries = 0;
+    var t = setInterval(function () {
+      if (rewire() || ++tries > 60) clearInterval(t);
+    }, 200);
+  });
+
   manifest().catch(function (e) { console.warn("static shim:", e.message); });
 })();
 """
