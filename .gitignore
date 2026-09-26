@@ -5,3 +5,6 @@ __pycache__/
 results/*.jsonl
 results/smoke-*.jsonl
 .pytest_cache/
+
+# Raw per-run event streams: large, and the summaries beside them carry the evidence.
+experiments/runs/*/events.jsonl

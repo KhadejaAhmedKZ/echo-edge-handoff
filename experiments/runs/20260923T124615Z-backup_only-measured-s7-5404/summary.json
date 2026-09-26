@@ -1,0 +1,76 @@
+{
+  "run_id": "20260923T124615Z-backup_only-measured-s7-5404",
+  "status": "completed",
+  "summary": {
+    "mode": "measured",
+    "frames_sent": 1197,
+    "frames_delivered": 1073,
+    "frames_lost": 124,
+    "frames_duplicated": 29,
+    "loss_pct": 10.36,
+    "mean_ms": 247.14,
+    "median_ms": 82.69,
+    "p95_ms": 1030.54,
+    "p99_ms": 1896.72,
+    "max_ms": 2430.86,
+    "p95_stable_ms": 1071.47,
+    "p95_handoff_ms": 751.23,
+    "inference_latency_gap_ms": -320.23,
+    "p95_crossing_ms": 1382.65,
+    "p95_settled_ms": 97.48,
+    "zone_gap_ms": 1285.17,
+    "crossing_loss_pct": 15.52,
+    "handoffs": 2,
+    "failed_handoffs": 0,
+    "reconnects": 0,
+    "mean_handoff_ms": 1724.88,
+    "state_bytes_transferred": 603,
+    "time_on_suboptimal_edge_s": 4.5,
+    "longest_gap_ms": 3027.63,
+    "profile": "interactive_inspection",
+    "requests_generated": 1197,
+    "results_received": 1073,
+    "results_lost": 124,
+    "unfinished_at_end": 2,
+    "current_response_ms": 103.0,
+    "deadline_ms": 150.0,
+    "late_results": 340,
+    "late_results_pct": 28.4,
+    "late_by_threshold": {
+      "100": {
+        "late": 454,
+        "pct": 37.93
+      },
+      "150": {
+        "late": 340,
+        "pct": 28.4
+      },
+      "200": {
+        "late": 338,
+        "pct": 28.24
+      }
+    },
+    "completed_handovers": 2,
+    "failed_handovers": 0,
+    "server_switches": 2,
+    "path_migrations": 1,
+    "unnecessary_reversals": 0,
+    "reversal_window_s": 10.0,
+    "time_on_suboptimal_server_s": 4.5,
+    "continuity_checks_passed": 4,
+    "continuity_checks_failed": 0,
+    "playback_stalls": null,
+    "playback_stall_time_s": null,
+    "min_buffer_s": null
+  },
+  "definitions": {
+    "response_time": "time from sending a request to receiving its result",
+    "lost_result": "no usable result within the request timeout, or dropped because too many requests were already waiting",
+    "late_result": "lost, or completed slower than the analysis deadline; share of all requests with a recorded outcome",
+    "p95_response_time": "95th percentile over completed requests only",
+    "longest_result_gap": "longest interval between two consecutive results",
+    "unnecessary_reversal": "a server switch back to the server just left, within the reversal window",
+    "time_on_suboptimal_server": "time spent on a server other than the best one by a measurement-only reference scorer, identical for every controller mode"
+  },
+  "faults_fired": []
+}

@@ -1,0 +1,190 @@
+{
+  "run_id": "20260923T123659Z-brief_disturbance-predictive-s7-54a8",
+  "schema_version": "echo-events/1",
+  "status": "completed",
+  "data_origin": "live",
+  "started_at": "2026-09-23T12:36:59+00:00",
+  "finished_at": "2026-09-23T12:38:00+00:00",
+  "code_version": {
+    "git_commit": null,
+    "git_dirty": null,
+    "source_sha256": "186d3ca8ca2bd8b19d43f38630078931afd49b606ab1079d6704e7e2d03bf770",
+    "identifier": "src-186d3ca8ca2b",
+    "note": "source_sha256 covers every .py file under echo_sim/; check with scripts/verify_evidence.py"
+  },
+  "scenario_id": "brief_disturbance",
+  "scenario_version": 1,
+  "controller_mode": "predictive",
+  "application_profile": "interactive_inspection",
+  "seed": 7,
+  "duration_s": 60.0,
+  "request_rate_hz": 20.0,
+  "deadline_ms": 150.0,
+  "prediction_horizon_s": 2.0,
+  "network_impairments": {
+    "networks": {
+      "wifi": {
+        "best": [
+          12.0,
+          2.0,
+          0.0005,
+          300.0
+        ],
+        "worst": [
+          180.0,
+          35.0,
+          0.18,
+          8.0
+        ]
+      },
+      "cellular": {
+        "best": [
+          22.0,
+          3.0,
+          0.0008,
+          200.0
+        ],
+        "worst": [
+          120.0,
+          25.0,
+          0.08,
+          10.0
+        ]
+      },
+      "satellite": {
+        "best": [
+          520.0,
+          25.0,
+          0.004,
+          60.0
+        ],
+        "worst": [
+          780.0,
+          60.0,
+          0.04,
+          8.0
+        ]
+      },
+      "wired": {
+        "best": [
+          1.5,
+          0.2,
+          1e-05,
+          1000.0
+        ],
+        "worst": [
+          6.0,
+          1.5,
+          0.001,
+          400.0
+        ]
+      }
+    },
+    "disturbances": [
+      {
+        "network_id": "wifi",
+        "start": 0.45,
+        "end": 0.52,
+        "rtt_add_ms": 140.0,
+        "jitter_add_ms": 20.0,
+        "loss_add": 0.06,
+        "outage": false,
+        "label": "Test event: Wi-Fi delay and loss spike"
+      }
+    ],
+    "backhaul_ms": {
+      "wifi": {
+        "A": 0.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "cellular": {
+        "A": 22.0,
+        "B": 0.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "satellite": {
+        "A": 45.0,
+        "B": 45.0,
+        "C": 0.0,
+        "D": 45.0
+      },
+      "wired": {
+        "A": 22.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 0.0
+      }
+    }
+  },
+  "processing_delays": {
+    "servers": {
+      "A": {
+        "base_ms": 26.0,
+        "load_penalty_ms": 4.0
+      },
+      "B": {
+        "base_ms": 21.0,
+        "load_penalty_ms": 4.0
+      },
+      "C": {
+        "base_ms": 15.0,
+        "load_penalty_ms": 3.0
+      },
+      "D": {
+        "base_ms": 12.0,
+        "load_penalty_ms": 3.0
+      }
+    },
+    "warmup_frames": 12,
+    "warmup_penalty_ms": 55.0
+  },
+  "faults": [],
+  "dependencies": {
+    "python": "3.11.15",
+    "platform": "Linux 6.18.44-fc-v37 (x86_64)",
+    "aioquic": "1.3.0",
+    "fastapi": "0.141.1",
+    "uvicorn": "0.53.0",
+    "cryptography": "50.0.1",
+    "numpy": "2.4.6",
+    "matplotlib": "3.11.2"
+  },
+  "event_count": 2265,
+  "schema_valid": true,
+  "schema_error": null,
+  "status_labels": {
+    "network": "emulated (userspace delay/jitter/loss/bandwidth relays)",
+    "processing": "simulated (controlled delay responding to load and warm/cold state)",
+    "transport": "real (aioquic QUIC with connection migration; real TCP)",
+    "tracking_state": "synthetic (moving placeholder tracks)"
+  },
+  "files": {
+    "configuration.json": {
+      "sha256": "992ed3e2515cdfaea7801a926def5c096c4b11d8a6e2c632eadef618a17600ca",
+      "bytes": 6505
+    },
+    "events.jsonl": {
+      "sha256": "19bab9f8883696b0be312c6e7c31cd130b1c5d234f6d02d577f05690efd04718",
+      "bytes": 2094185
+    },
+    "frames.jsonl": {
+      "sha256": "99a97f46b9b0feb59f32c3252926e6aea84adce4f49ef603c1b7c775947aa9de",
+      "bytes": 564074
+    },
+    "decisions.jsonl": {
+      "sha256": "b166d9a0e0b73efa4399c78025019888adf904b6ce5a5820f95db88561bfa10e",
+      "bytes": 191271
+    },
+    "handoffs.jsonl": {
+      "sha256": "51859749293b21edcb07ca0bf63f54311c29e4c69e1ccd1e59aefbd0d56da7c9",
+      "bytes": 18009
+    },
+    "summary.json": {
+      "sha256": "9e62c5b5bd1d10afde91ebf48d4ab0885d4d542d121e1818d1618137a0e81b88",
+      "bytes": 2441
+    }
+  }
+}

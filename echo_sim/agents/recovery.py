@@ -60,7 +60,7 @@ class RecoveryAgent:
                 f"the session never left {current.edge_id}",
                 self.backoff_s)
 
-        for cand in self.decision.rank():
+        for cand in self.decision.rank(hosting=current.edge_id):
             if not cand.reachable or self.is_blocked(cand.edge_id):
                 continue
             if cand.edge_id == failure.target_edge:

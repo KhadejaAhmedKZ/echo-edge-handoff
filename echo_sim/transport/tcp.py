@@ -145,7 +145,8 @@ class TcpTransport:
     async def close_standby(self) -> None:
         return None
 
-    async def drain(self, edge_id: str, session_id: str) -> None:
+    async def drain(self, edge_id: str, session_id: str,
+                    finish_up_to=None) -> None:
         return None
 
     async def close(self) -> None:

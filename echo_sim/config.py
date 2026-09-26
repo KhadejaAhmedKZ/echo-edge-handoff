@@ -55,7 +55,9 @@ NETWORKS: Dict[str, NetworkSpec] = {
     ),
     "satellite": NetworkSpec(
         id="satellite",
-        label="Satellite",
+        # Emulated high-delay backup path. Nothing here talks to a real
+        # satellite terminal; it is a link profile with satellite-like delay.
+        label="Satellite-like backup (emulated)",
         colour="#ffb27a",
         # Even at full quality satellite is slow: availability != suitability.
         best=(520.0, 25.0, 0.004, 60.0),
@@ -97,10 +99,10 @@ class EdgeSpec:
 
 
 EDGES: Dict[str, EdgeSpec] = {
-    "A": EdgeSpec("A", "Edge A - indoor", "wifi", 26.0, 4.0, 0.10, 4441, 5551, 4451),
-    "B": EdgeSpec("B", "Edge B - yard 5G", "cellular", 21.0, 4.0, 0.40, 4442, 5552, 4452),
-    "C": EdgeSpec("C", "Edge C - remote", "satellite", 15.0, 3.0, 0.70, 4443, 5553, 4453),
-    "D": EdgeSpec("D", "Edge D - dock", "wired", 12.0, 3.0, 0.95, 4444, 5554, 4454),
+    "A": EdgeSpec("A", "Server A - indoor lab", "wifi", 26.0, 4.0, 0.10, 4441, 5551, 4451),
+    "B": EdgeSpec("B", "Server B - yard", "cellular", 21.0, 4.0, 0.40, 4442, 5552, 4452),
+    "C": EdgeSpec("C", "Server C - remote", "satellite", 15.0, 3.0, 0.70, 4443, 5553, 4453),
+    "D": EdgeSpec("D", "Server D - dock", "wired", 12.0, 3.0, 0.95, 4444, 5554, 4454),
 }
 
 EDGE_ORDER = ["A", "B", "C", "D"]
@@ -169,24 +171,62 @@ INTENT_WEIGHTS: Dict[str, Weights] = {
 # --------------------------------------------------------------------------
 
 
+APPLICATION_PROFILES = {
+    "interactive_inspection": {
+        "label": "Interactive inspection",
+        "intent": "inference",
+        "description": "Live camera frames. Upcoming frames cannot be fetched "
+                       "early, and a late result loses its value.",
+    },
+    "buffered_playback": {
+        "label": "Buffered playback",
+        "intent": "streaming",
+        "description": "Prerecorded content. Upcoming segments can be fetched "
+                       "ahead, so a short delivery interruption can be hidden.",
+    },
+}
+
+DEADLINE_THRESHOLDS_MS = (100.0, 150.0, 200.0)
+
+
 @dataclass
 class RunConfig:
-    mode: str = "echo"              # tcp | quic | echo
+    mode: str = "measured"        # tcp_reconnect | quic_fixed | measured | predictive
+    scenario_id: str = "gradual_coverage"
+    profile: str = "interactive_inspection"
     duration_s: float = 90.0
-    frame_interval_s: float = 0.05  # 20 frames/second
+    frame_interval_s: float = 0.05  # 20 requests/second
     session_id: str = "robot-01"
     model_id: str = "inspection-model-v1"
     model_version: str = "1.0"
-    # Predictor looks this far ahead when scoring candidate edges.
+    # Predictor looks this far ahead when scoring candidate servers. The
+    # measurement-driven mode uses 0: smoothed current conditions only.
     prediction_horizon_s: float = 2.0
     # Decision hysteresis: a challenger must be this much better ...
     switch_margin: float = 0.12
     # ... for this many consecutive ticks before a handoff is authorised.
+    stable_link_hold_s: float = 0.0  # optional experimental hold; not a demonstrated improvement
     switch_patience: int = 3
     agent_tick_s: float = 0.25
-    # Cold-start penalty when an edge has to rebuild tracking state from zero.
+    # Cold-start penalty when a server has to rebuild tracking state from zero.
     warmup_frames: int = 12
     warmup_penalty_ms: float = 55.0
     tcp_reconnect_timeout_s: float = 1.2
+    # A request with no usable result within this long counts as lost.
+    request_timeout_s: float = 2.5
+    # Analysis deadline. Changing it never changes controller behaviour.
+    deadline_ms: float = 150.0
+    # Two server switches that return to where they started within this many
+    # seconds count as one unnecessary reversal.
+    reversal_window_s: float = 10.0
+    # Buffered playback
+    segment_s: float = 1.0
+    buffer_target_s: float = 10.0
+    buffer_hold_s: float = 4.0
+    playback_start_s: float = 2.0
     seed: int = 7
     telemetry_path: str = ""
+
+    @property
+    def request_rate_hz(self) -> float:
+        return round(1.0 / self.frame_interval_s, 3)

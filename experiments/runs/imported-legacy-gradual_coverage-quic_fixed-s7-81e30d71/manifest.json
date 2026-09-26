@@ -1,0 +1,169 @@
+{
+  "run_id": "imported-legacy-gradual_coverage-quic_fixed-s7-81e30d71",
+  "schema_version": "echo-events/1",
+  "status": "completed",
+  "data_origin": "imported",
+  "started_at": "unknown (pre-manifest)",
+  "finished_at": "2026-09-23T12:27:43+00:00",
+  "code_version": {
+    "identifier": "legacy (not recorded)",
+    "git_commit": null,
+    "source_sha256": null,
+    "note": "produced before manifests existed"
+  },
+  "scenario_id": "gradual_coverage",
+  "scenario_version": 0,
+  "controller_mode": "quic_fixed",
+  "application_profile": "interactive_inspection",
+  "seed": 7,
+  "duration_s": 90.0,
+  "request_rate_hz": 20.0,
+  "deadline_ms": 150.0,
+  "prediction_horizon_s": null,
+  "network_impairments": {
+    "networks": {
+      "wifi": {
+        "best": [
+          12.0,
+          2.0,
+          0.0005,
+          300.0
+        ],
+        "worst": [
+          180.0,
+          35.0,
+          0.18,
+          8.0
+        ]
+      },
+      "cellular": {
+        "best": [
+          22.0,
+          3.0,
+          0.0008,
+          200.0
+        ],
+        "worst": [
+          120.0,
+          25.0,
+          0.08,
+          10.0
+        ]
+      },
+      "satellite": {
+        "best": [
+          520.0,
+          25.0,
+          0.004,
+          60.0
+        ],
+        "worst": [
+          780.0,
+          60.0,
+          0.04,
+          8.0
+        ]
+      },
+      "wired": {
+        "best": [
+          1.5,
+          0.2,
+          1e-05,
+          1000.0
+        ],
+        "worst": [
+          6.0,
+          1.5,
+          0.001,
+          400.0
+        ]
+      }
+    },
+    "disturbances": [],
+    "backhaul_ms": {
+      "wifi": {
+        "A": 0.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "cellular": {
+        "A": 22.0,
+        "B": 0.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "satellite": {
+        "A": 45.0,
+        "B": 45.0,
+        "C": 0.0,
+        "D": 45.0
+      },
+      "wired": {
+        "A": 22.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 0.0
+      }
+    }
+  },
+  "processing_delays": {
+    "servers": {
+      "A": {
+        "base_ms": 26.0,
+        "load_penalty_ms": 4.0
+      },
+      "B": {
+        "base_ms": 21.0,
+        "load_penalty_ms": 4.0
+      },
+      "C": {
+        "base_ms": 15.0,
+        "load_penalty_ms": 3.0
+      },
+      "D": {
+        "base_ms": 12.0,
+        "load_penalty_ms": 3.0
+      }
+    },
+    "warmup_frames": null,
+    "warmup_penalty_ms": null
+  },
+  "faults": [],
+  "dependencies": {
+    "note": "not recorded"
+  },
+  "event_count": 2124,
+  "schema_valid": true,
+  "schema_error": null,
+  "status_labels": {
+    "origin": "imported from results/run-quic.json",
+    "code_version": "not recorded (pre-manifest)"
+  },
+  "files": {
+    "configuration.json": {
+      "sha256": "549cdbcae9994726143806a812dd8ac392c9862f7963e80f45d014db451625ca",
+      "bytes": 5388
+    },
+    "events.jsonl": {
+      "sha256": "148023c7cff313249a27ed31b6a41a6734ea223499fe3a1696ae7084ad73d1d0",
+      "bytes": 939079
+    },
+    "frames.jsonl": {
+      "sha256": "5711c9bcef3e48bf621820d381667fbc8c63dc59c248806db7dea9348e0f8ac5",
+      "bytes": 808086
+    },
+    "decisions.jsonl": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "handoffs.jsonl": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "summary.json": {
+      "sha256": "13ee9b47527df516657e295bc10bcda935df38f11d3403cb0a254cbad5e0a65c",
+      "bytes": 3577
+    }
+  }
+}

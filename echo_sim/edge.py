@@ -42,6 +42,8 @@ class EdgeSession:
     status: str = PREPARED
     warmup_left: int = 0
     frames_served: int = 0
+    # While draining, requests up to this number are still finished.
+    drain_until: int = -1
     opened_ts: float = field(default_factory=time.time)
 
 
@@ -57,8 +59,10 @@ class EdgeService:
         self._cpu_noise = 0.0
         self._noise_ts = time.monotonic()
         self.stats = {"frames": 0, "prepares": 0, "commits": 0, "state_bytes": 0}
-        # Set >0 to make this edge refuse handoffs, for the recovery demo.
+        # Set True to make this edge refuse every handoff.
         self.fail_prepare = False
+        # Scenario fault injector (scenarios.FaultInjector), shared by all edges.
+        self.faults = None
 
     # -- health ------------------------------------------------------------
 
@@ -91,6 +95,10 @@ class EdgeService:
             "prepared_sessions": sum(1 for s in self.sessions.values()
                                      if s.status == PREPARED),
             "expected_inference_ms": round(self.expected_inference_ms(), 2),
+            # What one more session costs here, so a controller can score
+            # this server as if it were hosting the session it wants to move.
+            "session_cpu_cost": 0.22,
+            "load_penalty_ms": self.spec.load_penalty_ms,
             "available": True,
             "frames_served": self.stats["frames"],
         }
@@ -136,9 +144,13 @@ class EdgeService:
 
         if t == P.ECHO_PREPARE:
             self.stats["prepares"] += 1
-            if self.fail_prepare:
-                return P.message(P.ECHO_ERROR, session_id=sid,
-                                 edge_id=self.spec.id, reason="prepare_refused")
+            injected = (self.faults.check_prepare(self.spec.id)
+                        if self.faults is not None else None)
+            if self.fail_prepare or injected:
+                self._emit("prepare_refused", sid,
+                           reason=injected or "prepare_refused")
+                return P.message(P.ECHO_ERROR, session_id=sid, edge_id=self.spec.id,
+                                 reason=injected or "prepare_refused")
             st = P.SessionState(
                 session_id=sid,
                 model_id=msg.get("model_id", self.cfg.model_id),
@@ -194,17 +206,20 @@ class EdgeService:
             sess = self.sessions.get(sid)
             if sess is not None:
                 sess.status = DRAINING
-                self._emit("session_drain", sid)
+                sess.drain_until = int(msg.get("finish_up_to", -1) or -1)
+                self._emit("session_drain", sid, finish_up_to=sess.drain_until)
             return P.message(P.ECHO_ACK, session_id=sid, edge_id=self.spec.id,
                              drained=True)
 
         if t == P.ECHO_FRAME:
             sess = self.sessions.get(sid)
-            if sess is None or sess.status != ACTIVE:
+            frame_no = int(msg.get("frame_no", 0))
+            finishing = (sess is not None and sess.status == DRAINING
+                         and frame_no <= sess.drain_until)
+            if sess is None or (sess.status != ACTIVE and not finishing):
                 return P.message(P.ECHO_ERROR, session_id=sid,
                                  edge_id=self.spec.id, reason="not_active",
                                  frame_no=msg.get("frame_no", 0))
-            frame_no = int(msg.get("frame_no", 0))
             duplicate = frame_no <= sess.state.last_processed_frame
             result = await self._infer(sess, frame_no)
             if not duplicate:
@@ -232,8 +247,8 @@ class EdgeService:
 
     def _emit(self, event: str, sid: str, **extra) -> None:
         if self.telemetry is not None:
-            self.telemetry.emit("edge", event=event, edge_id=self.spec.id,
-                                session_id=sid, **extra)
+            self.telemetry.emit("server_event", "edge", event=event,
+                                server=self.spec.id, session_id=sid, **extra)
 
 
 # --------------------------------------------------------------------------
@@ -318,12 +333,13 @@ async def start_edge_tcp(service: EdgeService) -> asyncio.AbstractServer:
     return await asyncio.start_server(handler, "127.0.0.1", service.spec.tcp_port)
 
 
-async def start_all_edges(cfg: RunConfig, telemetry=None):
+async def start_all_edges(cfg: RunConfig, telemetry=None, faults=None):
     """Bring up all four sites. Returns (services, servers)."""
     services: Dict[str, EdgeService] = {}
     servers = []
     for edge_id, spec in EDGES.items():
         svc = EdgeService(spec, cfg, telemetry)
+        svc.faults = faults
         services[edge_id] = svc
         servers.append(await start_edge_quic(svc))
         servers.append(await start_edge_tcp(svc))

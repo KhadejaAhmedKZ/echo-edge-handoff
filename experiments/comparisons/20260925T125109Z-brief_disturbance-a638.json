@@ -1,0 +1,96 @@
+{
+  "comparison_id": "20260925T125109Z-brief_disturbance-a638",
+  "created_at": "2026-09-25T12:51:09+00:00",
+  "scenario_id": "brief_disturbance",
+  "scenario_version": 1,
+  "application_profile": "interactive_inspection",
+  "seed": 17,
+  "consistent": true,
+  "note": "Repeated validation suite 20260925T124700104130Z",
+  "modes": {
+    "measured": {
+      "run_id": "20260925T125007Z-brief_disturbance-measured-s17-9b7e",
+      "data_origin": "live",
+      "code_version": "53d0574b78+dirty",
+      "status": "completed",
+      "metrics": {
+        "p95_ms": 170.89,
+        "median_ms": 67.98,
+        "late_results_pct": 5.43,
+        "late_by_threshold": {
+          "100": {
+            "late": 192,
+            "pct": 16.03
+          },
+          "150": {
+            "late": 65,
+            "pct": 5.43
+          },
+          "200": {
+            "late": 38,
+            "pct": 3.17
+          }
+        },
+        "results_lost": 0,
+        "longest_gap_ms": 175.17,
+        "completed_handovers": 3,
+        "failed_handovers": 0,
+        "unnecessary_reversals": 1,
+        "server_switches": 3,
+        "path_migrations": 0,
+        "time_on_suboptimal_server_s": 12.25,
+        "continuity_checks_passed": 6,
+        "continuity_checks_failed": 0,
+        "reconnects": 0,
+        "requests_generated": 1198,
+        "playback_stalls": null,
+        "playback_stall_time_s": null,
+        "min_buffer_s": null,
+        "state_bytes_transferred": 896,
+        "mean_handoff_ms": 506.89
+      }
+    },
+    "predictive": {
+      "run_id": "20260925T124904Z-brief_disturbance-predictive-s17-c998",
+      "data_origin": "live",
+      "code_version": "53d0574b78+dirty",
+      "status": "completed",
+      "metrics": {
+        "p95_ms": 173.43,
+        "median_ms": 73.24,
+        "late_results_pct": 5.68,
+        "late_by_threshold": {
+          "100": {
+            "late": 235,
+            "pct": 19.62
+          },
+          "150": {
+            "late": 68,
+            "pct": 5.68
+          },
+          "200": {
+            "late": 36,
+            "pct": 3.01
+          }
+        },
+        "results_lost": 0,
+        "longest_gap_ms": 169.24,
+        "completed_handovers": 5,
+        "failed_handovers": 0,
+        "unnecessary_reversals": 2,
+        "server_switches": 5,
+        "path_migrations": 0,
+        "time_on_suboptimal_server_s": 18.25,
+        "continuity_checks_passed": 10,
+        "continuity_checks_failed": 0,
+        "reconnects": 0,
+        "requests_generated": 1198,
+        "playback_stalls": null,
+        "playback_stall_time_s": null,
+        "min_buffer_s": null,
+        "state_bytes_transferred": 1498,
+        "mean_handoff_ms": 488.91
+      }
+    }
+  }
+}

@@ -19,9 +19,9 @@ CAUSES = {
     "congestion": "the path is congested",
     "instability": "the link is unstable rather than slow",
     "loss": "packets are being lost and resent",
-    "edge_load": "the edge server is overloaded",
-    "compute_bound": "the network is fine; inference itself is the bottleneck",
-    "satellite_physics": "you are on satellite, where the distance itself is the delay",
+    "edge_load": "the server is overloaded",
+    "compute_bound": "the network is fine; processing itself is the bottleneck",
+    "satellite_physics": "you are on the high-delay backup path, where distance itself is the delay",
     "healthy": "nothing is wrong",
 }
 
@@ -44,8 +44,8 @@ class Troubleshooter:
             cause, detail = "coverage", "the network you were on has no coverage here"
         elif current.network_id == "satellite" and current.path_rtt_ms > 400:
             cause = "satellite_physics"
-            detail = (f"satellite round trip is {current.path_rtt_ms:.0f} ms before "
-                      f"anything is computed")
+            detail = (f"the backup path round trip is {current.path_rtt_ms:.0f} ms before "
+                      f"anything is processed")
         elif pred["quality"] < 0.35 and pred["quality_slope"] < -0.01:
             cause = "coverage"
             detail = (f"coverage is at {pred['quality'] * 100:.0f}% and dropping "
@@ -59,12 +59,12 @@ class Troubleshooter:
                       f"even though average latency looks acceptable")
         elif health.get("cpu", 0) > 0.8:
             cause = "edge_load"
-            detail = (f"{current.edge_id} is at {health['cpu'] * 100:.0f}% CPU with "
+            detail = (f"Server {current.edge_id} is at {health['cpu'] * 100:.0f}% CPU with "
                       f"{health.get('active_sessions', 0)} sessions")
         elif current.inference_ms > current.path_rtt_ms * 1.5:
             cause = "compute_bound"
             detail = (f"{current.inference_ms:.0f} ms of the {observed:.0f} ms is "
-                      f"inference, not transit")
+                      f"processing, not transit")
 
         return {
             "cause": cause,

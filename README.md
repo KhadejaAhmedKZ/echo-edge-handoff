@@ -1,330 +1,263 @@
-# ECHO — Edge Compute Handoff Orchestration
+# ECHO Inspection Mission
 
-**Advanced Technology Pioneers 2026 · EDGE challenge prototype**
+**ECHO keeps a moving inspection application responsive by selecting a suitable
+network and processing server, preparing the target, and transferring session
+progress before switching.**
 
-**[▶ Watch the simulation](https://khadejaahmedkz.github.io/echo-edge-handoff/)**
- · [Read the report](https://khadejaahmedkz.github.io/echo-edge-handoff/report.html)
+This folder is the submitted prototype: one mission, one dashboard, one engine,
+and the recorded evidence behind every number it shows. The macOS, Linux,
+Wi-Fi-switch, QUIC-spike and satellite projects in `ECHO_Project/` are
+supporting experiments; they are listed in the dashboard's *Implementation
+status* panel and are not part of this mission.
 
-Keeping a live AI inference session running — and *fast* — while both the
-network underneath it and the nearest compute location change.
-
----
-
-## The problem, stated precisely
-
-An inspection robot moving through a site is surrounded by several networks at
-once: indoor Wi-Fi, private 5G, satellite, a wired dock. Today it uses one of
-them, waits for it to break, and only then looks for another. By that point the
-frame is late, the detection is stale, the operator is looking at the past.
-The same is true of any device that moves - a phone, a laptop, a vehicle.
-
-Fixing the transport is not enough. QUIC can carry a connection across a
-network change without dropping it — that part is solved. But if the compute
-you are talking to is still the box you started with, you are now reaching a
-distant server over a worse path, and the connection being *alive* is cold
-comfort. The latency the operator feels is:
-
-```
-end-to-end = network round trip + queueing + inference time + response transit
-```
-
-Every term moves when you move. **ECHO watches all four networks and all four
-edge sites continuously, predicts which pair is about to be best, and migrates
-the live inference session there before the current path degrades** — with the
-old edge still serving until the new one has proved it works.
-
-The success criterion is not "the connection stayed alive". It is: **inference
-results keep arriving, with a small latency spike, while both the network and
-the compute location change underneath you.**
-
----
-
-## What is in this repository
-
-| Piece | Where | What it does |
-|---|---|---|
-| Access-network model | `echo_sim/world.py` | Four networks whose quality ramps along a route; the portable stand-in for `tc`/`netem` |
-| Impairment relays | `echo_sim/netem.py` | Real packets, emulated delay / jitter / loss / bandwidth, applied per network |
-| ECHO protocol | `echo_sim/protocol.py` | Message set and the session state that travels during a handoff |
-| Edge inference service ×4 | `echo_sim/edge.py` | Speaks ECHO over QUIC *and* TCP; simulated inference that responds to load and cold starts |
-| QUIC transport | `echo_sim/transport/quic.py` | Real `aioquic`, real connection migration, standby connections |
-| TCP transport | `echo_sim/transport/tcp.py` | The cold-reconnect baseline |
-| Agents | `echo_sim/agents/` | Watcher, Predictor, Intent, Decision, Orchestrator, Handoff, Recovery, Troubleshooter, Explainer |
-| Client + controller | `echo_sim/client.py` | Frame loop, agent loop, and the one branch that differs between the three modes |
-| Orchestrator | `echo_sim/agents/orchestrator.py` | Owns the cycle: turns a ranking into an action, or a reasoned refusal |
-| Measurement | `echo_sim/metrics.py` | Per-frame records, percentiles, the inference-latency gap |
-| 3D dashboard | `dashboard/` | Third-person view of a person carrying a laptop through the four zones, live |
-
----
-
-## Quick start
+## Start
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+./start.sh                       # first run creates .venv; then opens http://127.0.0.1:8080
 ```
 
-Run all three experiments and produce the figures:
+The first screen explains the mission. **Replay recorded mission** plays a
+recorded run with no timing risk and no external service; **Run it live** runs
+the real experiment (about 90 s). Everything is local: no CDN, no fonts, no API
+keys.
 
-```bash
-.venv/bin/python scripts/run_experiments.py --duration 90 --seed 7
-.venv/bin/python scripts/plot_results.py
-```
+Tests: `.venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q`
 
-Rebuild the shareable static site from the recorded runs:
+## What a judge sees
 
-```bash
-python3 scripts/build_pages.py
-```
+The dashboard answers five questions, top to bottom:
 
-Watch it live in 3D:
-
-```bash
-.venv/bin/python dashboard/server.py
-```
-
-then open <http://127.0.0.1:8080>, pick a mode and press **Run**. Everything
-runs on one machine; nothing is installed outside the project folder.
-
-Tests:
-
-```bash
-.venv/bin/python -m pytest -q
-```
-
----
-
-## The three experiments
-
-All three use the same route, the same four network profiles, the same seed,
-the same frame workload and the same edge servers. The only difference is the
-client's decision logic, which is one branch in `client.py`.
-
-**1. TCP baseline.** No migration and no prediction. A TCP connection is bound
-to its four-tuple, so when the access network goes the connection goes with it.
-The client notices via timeout, dials again, and the new edge has to rebuild
-the inference session from nothing — a reconnect *and* a cold start.
-
-**2. QUIC only.** The connection survives the network change: same connection
-ID, new four-tuple, server-side path validation, no handshake. But the compute
-never moves. This is the interesting baseline, because nothing looks broken —
-no drops, no reconnects — and the latency is still worse the whole way, because
-the user is talking to a box that is no longer near them.
-
-**3. QUIC + ECHO.** Watch, predict, prepare, transfer, verify, commit, drain.
-
----
-
-## The ECHO handoff
-
-```
-PREPARE   →  target allocates resources (the model is already resident there)
-STATE     →  the live session state crosses — session only, never the model
-READY     →  target confirms it reconstructed the session
-VERIFY    →  target infers one duplicate frame, proving it actually works
-COMMIT    →  target becomes the active inference server
-ACK       →  handoff complete
-DRAIN     →  old edge finishes outstanding work and accepts no more
-```
-
-Two properties make this safe rather than merely fast:
-
-* **It starts early.** The sequence runs while the current path is still good,
-  triggered by the Predictor's trend, not by a failure.
-* **Nothing is discarded until the target acknowledges.** A failed handoff
-  costs one wasted attempt; the session never left the old edge. `RECOVER`
-  handles the case where the old path is gone too.
-
-What actually travels is small — a few hundred bytes: session id, model id and
-version, last processed frame, state version, and the object-tracking state.
-The model itself is already on every edge. That is why a handoff costs
-milliseconds instead of a model download.
-
----
-
-## The agents
-
-| Agent | Question it answers |
+| Question | Panel |
 |---|---|
-| **Watcher** | What does *every* network and *every* edge look like right now — including the ones nobody is using? |
-| **Predictor** | Where is each one heading? (EWMA level + least-squares slope, extrapolated over a horizon) |
-| **Intent** | What is the user doing? A call wants steadiness, a download wants throughput, inference wants lowest total time. |
-| **Decision** | Which *(network, edge)* pair has the lowest predicted end-to-end cost — with hysteresis, so it does not oscillate? |
-| **Handoff** | Run the sequence above, early and reversibly. |
-| **Recovery** | The handoff failed. Stay, retry elsewhere, or cold-start — and back off the edge that failed. |
-| **Troubleshooter** | Things feel bad and nothing is switching. *Why?* Congestion, coverage, instability, loss, edge load, or simply compute-bound. |
-| **Explainer** | Say it in a sentence a person would accept, generated from the same numbers the decision used. |
+| What is the robot doing? | Mission route: robot, zones, network coverage lanes, the four servers |
+| What is changing? | Network and server cards; test events are labelled as test events |
+| What is ECHO deciding? | Current decision + plain explanation; candidate scores on demand |
+| Is the application still meeting its deadline? | Application experience + response-time chart with the deadline line |
+| How does this compare with the alternatives? | Comparison table; every number opens the run that produced it |
 
-Scoring is over the *pair*, not the network alone:
+The moment to watch: the connection deteriorates, a **dashed line** reaches to
+the server being prepared while the old one keeps serving, the handover steps
+tick through **Prepare → Transfer → Check → Switch → Finish old work**, and the
+continuity panel reads *"The server changed. The session identity and progress
+continued."* - with the response-time chart showing results still arriving.
+
+Visual states are driven only by engine events: the dashed line appears on the
+controller's `handoff_phase_changed`, never on a timer. "Robot moved into
+another zone" and "controller selected another server" are separate lines in the
+decision timeline, because they are not the same thing.
+
+## Status of every part
+
+| Part | Status |
+|---|---|
+| QUIC transport, connection migration (aioquic) | **real**, on loopback |
+| TCP reconnect baseline | **real** sockets |
+| Network conditions (delay, jitter, loss, bandwidth, outages) | **emulated** by userspace relays |
+| Processing on the servers | **simulated** delay that responds to load and cold starts; no detector runs |
+| Session-state transfer + continuity checks | **implemented**; the tracking content is synthetic, so no tracking accuracy is claimed |
+| Satellite-like backup path | **emulated** link profile; no satellite terminal |
+| Application profile | **selected explicitly**; automatic app recognition from encrypted traffic is not claimed |
+| Buffered playback | **controlled synthetic workload** (not a video player, not YouTube) |
+| Explanations | **deterministic** sentences from the decision's own numbers; no language model |
+| Public Wi-Fi / captive portal / VPN | **proposed**, not implemented; the mission assumes managed infrastructure |
+
+## Controller modes (same engine, same scenario, same seed)
+
+| Mode | What it does |
+|---|---|
+| `tcp_reconnect` - TCP reconnect baseline | Keeps one TCP connection until it breaks, reconnects, rebuilds the session from nothing |
+| `quic_fixed` - QUIC with fixed server | The connection follows the robot across networks; processing never moves |
+| `measured` - Measurement-driven migration | ECHO migration on smoothed current measurements (forecast horizon 0). **Demonstration default** |
+| `predictive` - Predictive migration | ECHO migration on a 2 s trend forecast. Experimental option |
+
+Measurement-driven is the default because it is the conservative choice and the
+recorded runs do not show prediction winning consistently - see
+`experiments/RESULTS.md`, generated from the comparisons.
+
+## Scenarios
+
+| Scenario | What happens | What it tests |
+|---|---|---|
+| A - Gradual coverage change | Lab → yard → dock; Wi-Fi fades, 5G and the dock take over | The core mechanism |
+| B - Brief disturbance | In the lab, Wi-Fi gets a ~4 s delay/loss spike and recovers | Whether the controller avoids switching away and straight back |
+| C - Target cannot prepare | Scenario A, but the first prepared target refuses (deterministic **test event**) | Staying on the usable old server and reporting the failure |
+| D - Only the backup path is left | In the yard, 5G is cut; only the high-delay backup path remains | Using the backup only when it is the only route; reachable is not the same as on time |
+
+Scenario definitions live in `echo_sim/scenarios.py` and are versioned; the
+version is recorded in every run's manifest and in `experiments/configurations/`.
+
+## Metrics (one implementation: `echo_sim/metrics.py`)
+
+| Metric | Definition |
+|---|---|
+| Current response time | duration of the latest completed request |
+| Late results | lost results plus completed ones slower than the analysis deadline, as a share of all requests |
+| p95 response time | 95th percentile over completed requests |
+| Lost results | no usable result within 2.5 s, or dropped because 48 requests were already waiting |
+| Longest result gap | longest interval between two consecutive results |
+| Completed handovers | server migrations that passed every step |
+| Unnecessary reversals | a server switch back to the server just left, within 10 s |
+| Time on a server that was not the best | judged by a measurement-only reference scorer, identical for every mode |
+
+The deadline (100 / 150 / 200 ms) is an **analysis** threshold. Changing it in
+the dashboard never changes controller behaviour. The dashboard never computes
+its own version of a metric: it displays `metrics_updated` events (live) and
+`summary.json` (recorded), both produced by `RunMetrics.summary()`.
+
+## Evidence
 
 ```
-score = w₁·predicted_path_rtt + w₂·predicted_jitter + w₃·predicted_loss
-      + w₄·predicted_inference_ms + w₅·edge_load + w₆·proximity_cost
+experiments/
+  configurations/            scenario + controller definitions, versioned
+  runs/<run-id>/             configuration.json, events.jsonl, frames.jsonl,
+                             decisions.jsonl, handoffs.jsonl, summary.json, manifest.json
+  comparisons/<id>.json      which runs each comparison was built from
+  RESULTS.md                 generated tables for the report
 ```
 
-with the weight vector supplied by the Intent Agent. This is why satellite
-loses even where it has the best coverage: it is *available*, and still the
-wrong answer, because 500+ ms of round trip is physics, not congestion.
+Each manifest records the run id, engine code identity (git commit when
+available, and a SHA-256 of `echo_sim/`), scenario id and version, controller
+mode, profile, seed, duration, request rate, network impairments, processing
+delays, deadline, dependency versions, whether the data is **live**,
+**replayed** or **imported**, and the SHA-256 of every file.
 
-Planned but not built: Cost, Security, Energy, Policy and Learning agents. The
-weight vector in `config.py` is the seam they plug into.
-
----
-
-## Preload buffer
-
-For live traffic — a call, live inference — buffering cannot help; you cannot
-pre-send something that has not happened yet, so the switch itself has to be
-seamless. For non-live traffic — a lecture stream, music — a few seconds can be
-pre-fetched while the link is good, and that buffer covers the entire handoff.
-The Intent Agent decides which case applies and the dashboard shows which.
-
----
-
-## What is real and what is emulated
-
-Stated plainly, because it is the first thing a judge should ask.
-
-**Real:** the QUIC stack (`aioquic`), the TLS handshake, connection migration
-across a genuinely different four-tuple, all four edge servers as independent
-services, the ECHO message exchange, real UDP and TCP sockets, and every
-latency number — measured end to end from the client, not modelled.
-
-**Emulated:** the link conditions. Delay, jitter, loss and bandwidth are
-applied by relays in `netem.py` that sit between client and edge, driven by the
-coverage model in `world.py`. This is what `tc`/`netem` does, moved into
-userspace so the whole thing runs on one laptop of any OS. The relay identifies
-which network a packet is on by the client's source port, which is also what
-makes migration observable.
-
-**Simulated:** the inference itself is a controlled delay that responds to edge
-load and to whether the session was warm-started or rebuilt cold. What this
-project measures is end-to-end inference latency and session continuity across
-a handoff, not the accuracy of a detector. Swapping in a real YOLO forward pass
-means replacing `EdgeService._infer` and nothing else.
-
-**On Linux**, `world.py`'s numbers can be pushed into real `tc` qdiscs across
-network namespaces instead of into the relays; the rest of the system does not
-change. The relay layer exists so the prototype is not tied to one OS.
-
----
-
-## Metrics
-
-The headline:
-
-```
-Inference Latency Gap = p95 latency while crossing zones − p95 latency while settled
+```bash
+.venv/bin/python scripts/run_experiments.py            # all scenarios x all modes -> runs + comparisons
+.venv/bin/python scripts/report_tables.py              # regenerate experiments/RESULTS.md
+.venv/bin/python scripts/verify_evidence.py            # re-hash every run against its manifest
+.venv/bin/python scripts/import_legacy.py              # import results/run-*.json (pre-manifest) as "imported"
 ```
 
-The crossing windows are fixed positions on the route, identical for every
-mode, so a mode cannot improve its score by declaring fewer transitions.
+The original README table (`results/run-*.json`, 90 s, seed 7) is kept as three
+**imported** runs, recomputed with the shared metrics and labelled as having no
+recorded code version. It has no measurement-driven run.
 
-Also recorded: mean / median / p95 / p99 / max latency, frames lost and
-duplicated, longest gap with no result at all (the visible freeze), handoff
-duration broken down by phase, state bytes transferred, failed handoffs,
-reconnects, and **time spent on an edge that was no longer the best available**
-— the number that separates QUIC-only from ECHO.
+## Telemetry contract (`echo_sim/events.py`)
 
----
+Every event: `run_id, sequence_number, elapsed_time, event_type,
+controller_mode, scenario_id, source_component, payload`. Types include
+`mission_started, network_observed, zone_changed, candidate_scored,
+decision_made, handoff_phase_changed, handoff_completed, handoff_failed,
+state_verified, request_completed, request_lost, fault_injected,
+metrics_updated, mission_completed`. Every event is validated when emitted; a
+violation is recorded as `agent_error`, never silently dropped. The dashboard,
+replay, evidence files and result tables all read this one stream.
 
-## Results
+## API (`dashboard/server.py`)
 
-90 seconds, 1799 frames at 20 fps, seed 7, identical route and workload for all
-three. Full data in `results/`, figures regenerated by `scripts/plot_results.py`.
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/capabilities` | implementation status, modes, profiles |
+| `GET /api/scenarios` | scenario definitions and the static world |
+| `POST /api/runs` | start one live run (bounded, validated config; 409 if one is running) |
+| `GET /api/runs`, `GET /api/runs/{id}` | list; status + configuration + manifest |
+| `POST /api/runs/{id}/stop` | stop; partial evidence is kept with status `stopped` |
+| `GET /api/runs/{id}/summary`, `/frames`, `/decisions`, `/handoffs` | the evidence files |
+| `GET /api/runs/{id}/recording` | complete `events.jsonl`, for replay |
+| `GET /api/runs/{id}/export`, `/verify` | zip download; re-hash against manifest |
+| `POST /api/comparisons`, `GET /api/comparisons[/{id}]` | run all modes, or assemble from run ids |
+| `WS /api/runs/{id}/events`, `WS /api/live/events` | live telemetry |
 
-| | TCP baseline | QUIC only | **QUIC + ECHO** |
-|---|---|---|---|
-| p95 end-to-end latency | 511 ms | 186 ms | **134 ms** |
-| median latency | 200 ms | 102 ms | **62 ms** |
-| frames lost | 11 | 0 | **0** |
-| longest gap with no result | 220 ms | 803 ms | **160 ms** |
-| time on a suboptimal edge | 44.5 s | 70.8 s | **6.8 s** |
-| reconnects | 1 | 0 | **0** |
-| successful handoffs | - | - | **4** |
-| inference latency gap | 39 ms | 40 ms | **15 ms** |
+Only one live experiment runs at a time (the relays bind fixed local ports), and
+every run writes into a new directory that is created exclusively, so two runs
+can never overwrite each other.
 
-![comparison](results/comparison.png)
+## Engine fixes made for this version
 
-**Reading this honestly.** Two caveats belong next to these numbers.
+* **Activity classification had an unreachable branch.** The broad "inference"
+  rule matched first, so "realtime call" could never be returned. Rules are now
+  disjoint, tested, return `unknown` when unsure, and `unknown` uses the
+  conservative (live) policy. The classifier only advises; the profile is
+  selected explicitly.
+* **The robot's own session made its current server look worse.** Scoring
+  counted this session's load against the server hosting it, so the other
+  server looked better right after every switch - the cause of the A↔B↔A
+  switching in the original run. Every server is now scored as if it hosted the
+  session.
+* **No discretionary switch before the Watcher has 8 measurements (2 s)**, and
+  **returning to a server just left needs a 25 % margin held for 3× as long**
+  (not applied when the server was left because its path died).
+* **When the current network dies, move the connection first.** The session
+  stays on its server and the QUIC connection migrates to the best surviving
+  network at once (no session work); a server change is then considered
+  make-before-break while that path serves. Reachability now also requires a
+  live measurement, because the smoothed level lagged an abrupt outage by
+  about 1.5 s.
+* **Finish old work is real**: the old server receives `ECHO_DRAIN` with the
+  last request number already sent, finishes those, and refuses new ones.
+* **Hosts without IPv6** (some containers/VMs) could not open QUIC connections,
+  because aioquic's client insists on a dual-stack socket. The client now uses
+  IPv4 when IPv6 is unavailable.
 
-First, this is one run at one seed. Most columns are stable across seeds, but
-QUIC-only's inference latency gap is not: it depends on exactly when its
-migration lands relative to a crossing window, and it has measured anywhere
-from 3 ms to 40 ms across runs. When it measures low, that is not QUIC-only
-doing well - it is QUIC-only being *uniformly* worse, holding a connection to
-an edge it should have left, so its settled latency is already high and a zone
-crossing barely moves it. Measured against itself it can look stable. Measured
-against what the robot should have been getting, it spends 71 of 90 seconds on
-the wrong edge.
+## Known limitations (stated, not hidden)
 
-Second, the gap metric alone is not the argument; it is only meaningful beside
-the absolute numbers. ECHO has the lowest p95, the lowest median, the shortest
-freeze, no losses, no reconnects, and 6.8 seconds on a suboptimal edge instead
-of 71 - while performing four live session migrations. Its 15 ms gap is the
-visible cost of those four handoffs, paid to avoid a permanently elevated
-floor.
-
-TCP shows the failure mode both others avoid: one connection loss, a cold
-session rebuild, eleven frames gone, and a p95 nearly four times ECHO's.
-
-![timeline](results/latency-timeline.png)
-
-![distribution](results/latency-cdf.png)
-
----
-
-## Dashboard
-
-A third-person 3D view in the EDGE palette - orange, white and gray on black.
-You watch the EDGE inspection robot - a quadruped with its sensor payload -
-walk the route while the four edge sites stand along it. The link is drawn from
-the robot's radio mast to the serving edge with packets flowing along it;
-during a handoff a second white beam reaches ahead to the edge being prepared.
-
-Around the scene, three things are readable at a glance:
-
-* **All four access networks**, each with its six tracked characteristics -
-  signal, latency, jitter, packet loss, bandwidth and availability - plus the
-  Predictor's verdict on where that link is heading. Networks nobody is using
-  are shown exactly as fully as the active one, because that is the point.
-* **All four edge sites** across the top: expected inference cost, CPU, and
-  active sessions, with the serving edge lit and the edge being prepared
-  outlined.
-* **The agent pipeline**, all nine at once, each showing what it currently
-  believes: how many links the Watcher is holding samples for, which link the
-  Predictor thinks fails next and when, what the Intent Agent thinks the robot
-  is doing, the Decision Engine's chosen pair with its score and its runner-up
-  and how close a challenger is to earning a switch, the Orchestrator's chosen
-  action and any veto it applied, the Handoff state machine, the Recovery
-  Agent's backoff list, the Troubleshooter's root cause, and the Explainer's
-  sentence.
-
-Every value is read straight off the agent that produced it, so the dashboard
-cannot show a decision that differs from the one actually taken.
-
-The browser is fed the same event stream that the log file records, so what is
-on screen and what the numbers say cannot disagree. Finished runs can be
-replayed from their JSONL recording.
-
----
+* **One run per controller per scenario (seed 7).** The comparisons are single
+  runs, not distributions. Run other seeds with `--seed`.
+* **The high-delay backup path overwhelms QUIC at 20 requests/s.** With about
+  620 ms round trip and 1 % loss, QUIC's congestion control cannot sustain the
+  request rate; results queue and some time out (scenario D). ECHO does not yet
+  lower the request rate on such a path.
+* **The TCP relay turns loss into delay** (dropping bytes would corrupt the
+  stream), while the UDP relay drops packets and QUIC reacts to the losses. On
+  the lossy backup path this treats TCP more kindly than a real network would.
+* **Scenario B:** both ECHO modes still switch away during the spike (and on
+  natural Wi-Fi dips) and come back; the dashboard counts these as
+  unnecessary reversals. The buffered-playback profile, which can lean on its
+  buffer, does not switch.
+* All four servers run in one process; server health is read in-process, not
+  probed over the network.
+* `scripts/build_pages.py` and `scripts/plot_results.py` still read the
+  original `results/` files for the older GitHub Pages site.
 
 ## Layout
 
 ```
-echo_sim/          the system
-  world.py         where the user is and what each network looks like there
-  netem.py         impairment relays (the tc/netem stand-in)
-  protocol.py      ECHO messages + session state
-  edge.py          edge inference service, QUIC and TCP
-  client.py        robot client, frame loop, agent loop
-  runner.py        boots a whole experiment and tears it down
-  metrics.py       percentiles and the inference-latency gap
-  telemetry.py     one event stream, to the dashboard and to disk
-  transport/       quic.py (migration, standby), tcp.py (cold reconnect)
-  agents/          watcher, predictor, intent, decision, orchestrator,
-                   handoff, recovery, troubleshooter, explainer
-dashboard/         server.py + index.html (Three.js, third-person view)
-scripts/           run_experiments.py, plot_results.py
-tests/             the parts where a silent mistake would invalidate results
-results/           figures and recorded runs
+echo_sim/
+  events.py        the telemetry contract          scenarios.py   scenarios + fault injector
+  telemetry.py     validated event bus             evidence.py    run dirs, manifests, comparisons
+  world.py         route, coverage, disturbances   runner.py      one run, recorded
+  netem.py         impairment relays               client.py      robot client + 4 controller modes
+  edge.py          processing servers              metrics.py     the one metrics implementation
+  transport/       quic.py, tcp.py                 agents/        watcher, predictor, intent,
+                                                                  decision, orchestrator, handoff,
+                                                                  recovery, troubleshooter, explainer
+dashboard/         server.py (API) + index.html (the mission dashboard, no external assets)
+scripts/           run_experiments, report_tables, verify_evidence, import_legacy
+experiments/       the evidence
+docs/              the earlier GitHub Pages site (original 3D replay; not updated)
 ```
+
+
+## 25 September: mission control update
+
+The default view now shows a yellow EDGE-lettered quadruped travelling through the inspection site, four processing towers, network measurements and a plain-language controller panel. Earth and its satellites remain visible in an inset. Expand Earth is optional. Both views are local; no CDN or API key is required.
+
+The globe uses 3,703 positions propagated from the existing partial CelesTrak catalog to **21 September 2026, 07:31:30 UTC**. It is a dated snapshot, not live satellite tracking. Three selected satellite models and orbital traces reuse the older globe's visual components. Orbit geometry does not control the inspection simulation. The robot is a procedural illustration with an EDGE text label, not an official robot CAD model or validated brand logo.
+
+The robot's position, network connection, server highlight and preparation link follow the run's telemetry. Recorded replay is labelled. A connected but slow result displays “Connected · deadline unmet”. No detector or physical robot is controlled.
+
+The controller now resets interrupted challenger evidence, so alternating candidates cannot accumulate votes across unrelated checks. A five-second sustained-benefit guard was also tested over full-length scenario B with seeds 7, 17 and 27. It did not eliminate reversals and incurred extra late results. Consequently **that guard is disabled by default**; it remains an experimental RunConfig option, stable_link_hold_s. Existing recordings are retained with their original source hashes. Do not describe those recordings as results from the new default code.
+
+Repeated experiments:
+
+```sh
+.venv/bin/python scripts/run_validation_suite.py --seeds 7 17 27
+# Optional experimental guard, explicitly separate from the default:
+.venv/bin/python scripts/run_validation_suite.py --scenarios brief_disturbance --modes measured predictive --seeds 7 17 27 --stable-link-hold 5
+```
+
+The suite records every run, creates paired comparisons and saves descriptive mean, median, sample standard deviation and range for per-run metrics in experiments/suites. It refuses source changes within a suite. Its sample statistics do not establish statistical significance. Full default validation across all scenarios remains necessary before submission.
+
+Remaining engineering limitations: automatic backup-path workload reduction and local inference fallback are not implemented; all edge services still share one process; TCP loss approximation differs from QUIC packet loss. These are disclosed rather than presented as completed improvements. Baselines are laboratory controls, not measurements of current UAE deployments.
+
+## Scroll-down Earth and connected prediction services
+
+The Earth now has a permanent full-width section below the inspection mission; no view switch is needed. The mission server starts the existing sibling 06_satellite-dashboard gateway and model worker when available, and proxies three fixed local endpoints:
+
+- `/api/orbit/status`: N2YO orbital elements and SGP4 visibility prediction for the fixed Abu Dhabi observer.
+- `/api/orbit/constellation`: CelesTrak catalog propagated to the current time; stale/partial catalog labels are preserved.
+- `/api/model/example?sample=0`: actual Random Forest inference on labelled held-out cellular dataset examples.
+
+The existing N2YO_API_KEY is read from the project or satellite dashboard .env into the server-side gateway only. No credential is copied into frontend assets. The initial dated globe snapshot remains an explicitly labelled fallback if the gateway cannot provide a catalog. Satellite tracking targets and candidates are drawn from the API response. These advisory forecasts do not drive mission handovers. Moving robot GPS, a matching signal-telemetry adapter and end-to-end validation are still required for that integration.
+
+Verified on this Mac: N2YO status returned a target, Random Forest inference returned a probability, and the constellation returned 3,699 propagated positions with stale orbital elements correctly flagged. 68 automated tests pass. Preview for this editing session uses port 8081 because the older server still owns 8080.

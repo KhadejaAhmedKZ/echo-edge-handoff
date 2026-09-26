@@ -11,7 +11,7 @@ import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from .config import NETWORK_ORDER, NETWORKS, NetworkSpec
 
@@ -79,25 +79,51 @@ class World:
     so the Predictor has to cope with a wobbly signal rather than a clean ramp.
     """
 
-    def __init__(self, duration_s: float, seed: int = 7) -> None:
+    def __init__(self, duration_s: float, seed: int = 7,
+                 route: Tuple[float, float] = (0.0, 1.0),
+                 disturbances: Sequence = ()) -> None:
         self.duration_s = duration_s
+        self.route = (float(route[0]), float(route[1]))
+        self.disturbances = list(disturbances)
         self.rng = random.Random(seed)
         self.start_ts = time.monotonic()
         self._noise: Dict[str, float] = {n: 0.0 for n in NETWORK_ORDER}
         self._noise_ts = self.start_ts
         self._frozen_position: float | None = None
+        self._frozen_fraction: float | None = None
 
     # -- time / position ---------------------------------------------------
 
     def elapsed(self) -> float:
         return time.monotonic() - self.start_ts
 
+    def mission_fraction(self) -> float:
+        """How far through the mission we are in time, 0..1."""
+        if self._frozen_fraction is not None:
+            return self._frozen_fraction
+        return min(1.0, max(0.0, self.elapsed() / self.duration_s))
+
     @property
     def position(self) -> float:
-        """User's progress along the route, 0.0 at the lab, 1.0 at the dock."""
+        """Robot's place on the site, 0.0 at the lab, 1.0 at the dock.
+
+        A scenario may cover only part of the site; `route` maps mission time
+        onto that stretch.
+        """
         if self._frozen_position is not None:
             return self._frozen_position
-        return min(1.0, max(0.0, self.elapsed() / self.duration_s))
+        a, b = self.route
+        return a + (b - a) * self.mission_fraction()
+
+    def freeze_time(self, fraction: float) -> None:
+        """Pin mission time (for disturbances); used by tests."""
+        self._frozen_fraction = fraction
+
+    def active_disturbances(self, network_id: Optional[str] = None) -> List:
+        f = self.mission_fraction()
+        return [d for d in self.disturbances
+                if d.start <= f < d.end
+                and (network_id is None or d.network_id == network_id)]
 
     def freeze(self, position: float) -> None:
         """Pin the position; used by tests and by replaying a recorded run."""
@@ -127,6 +153,8 @@ class World:
         self._advance_noise()
         spec = NETWORKS[network_id]
         base = _interp(spec.coverage, self.position)
+        if any(d.outage for d in self.active_disturbances(network_id)):
+            return 0.0
         if base <= 0.0:
             return 0.0
         q = base + self._noise[network_id] * base
@@ -140,13 +168,16 @@ class World:
         b_rtt, b_jit, b_loss, b_bw = spec.best
         w_rtt, w_jit, w_loss, w_bw = spec.worst
         d = 1.0 - q
+        rtt_add = sum(x.rtt_add_ms for x in self.active_disturbances(network_id))
+        jit_add = sum(x.jitter_add_ms for x in self.active_disturbances(network_id))
+        loss_add = sum(x.loss_add for x in self.active_disturbances(network_id))
         return LiveProfile(
             network_id=network_id,
             quality=q,
-            rtt_ms=b_rtt + (w_rtt - b_rtt) * d,
-            jitter_ms=b_jit + (w_jit - b_jit) * d,
+            rtt_ms=b_rtt + (w_rtt - b_rtt) * d + rtt_add,
+            jitter_ms=b_jit + (w_jit - b_jit) * d + jit_add,
             # loss climbs faster than linearly as coverage falls away
-            loss=b_loss + (w_loss - b_loss) * (d ** 1.8),
+            loss=min(0.9, b_loss + (w_loss - b_loss) * (d ** 1.8) + loss_add),
             bandwidth_mbps=b_bw + (w_bw - b_bw) * d,
         )
 
@@ -157,6 +188,10 @@ class World:
         return {
             "t": round(self.elapsed(), 3),
             "position": round(self.position, 4),
+            "mission_fraction": round(self.mission_fraction(), 4),
             "zone": self.zone_label(),
             "networks": {nid: p.as_dict() for nid, p in self.all_profiles().items()},
+            "disturbances": [
+                {"network_id": d.network_id, "label": d.label, "outage": d.outage}
+                for d in self.active_disturbances()],
         }

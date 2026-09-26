@@ -1,0 +1,334 @@
+{
+  "status": "interrupted_or_failed",
+  "source_sha256": "f6e6d9b8e9d8039bb35bbdf79fc8d5c07d9315bf1f3008a5176b230a7067ab18",
+  "seeds": [
+    7,
+    17,
+    27
+  ],
+  "note": "Paired seeds; scheduler timing and transport packet patterns still vary. Small samples are descriptive, not proof of significance.",
+  "rows": [
+    {
+      "scenario": "brief_disturbance",
+      "mode": "predictive",
+      "seed": 7,
+      "run_id": "20260925T124308Z-brief_disturbance-predictive-s7-75b2",
+      "summary": {
+        "mode": "predictive",
+        "frames_sent": 1199,
+        "frames_delivered": 1199,
+        "frames_lost": 0,
+        "frames_duplicated": 9,
+        "loss_pct": 0.0,
+        "mean_ms": 78.17,
+        "median_ms": 64.7,
+        "p95_ms": 181.05,
+        "p99_ms": 221.3,
+        "max_ms": 401.07,
+        "p95_stable_ms": 168.08,
+        "p95_handoff_ms": 233.14,
+        "inference_latency_gap_ms": 65.07,
+        "p95_crossing_ms": null,
+        "p95_settled_ms": 181.05,
+        "zone_gap_ms": null,
+        "crossing_loss_pct": 0.0,
+        "handoffs": 4,
+        "failed_handoffs": 0,
+        "reconnects": 0,
+        "mean_handoff_ms": 404.23,
+        "state_bytes_transferred": 1203,
+        "time_on_suboptimal_edge_s": 13.5,
+        "longest_gap_ms": 129.42,
+        "profile": "interactive_inspection",
+        "requests_generated": 1199,
+        "results_received": 1199,
+        "results_lost": 0,
+        "unfinished_at_end": 0,
+        "current_response_ms": 48.6,
+        "deadline_ms": 150.0,
+        "late_results": 80,
+        "late_results_pct": 6.67,
+        "late_by_threshold": {
+          "100": {
+            "late": 250,
+            "pct": 20.85
+          },
+          "150": {
+            "late": 80,
+            "pct": 6.67
+          },
+          "200": {
+            "late": 28,
+            "pct": 2.34
+          }
+        },
+        "completed_handovers": 4,
+        "failed_handovers": 0,
+        "server_switches": 4,
+        "path_migrations": 0,
+        "unnecessary_reversals": 2,
+        "reversal_window_s": 10.0,
+        "time_on_suboptimal_server_s": 13.5,
+        "continuity_checks_passed": 8,
+        "continuity_checks_failed": 0,
+        "playback_stalls": null,
+        "playback_stall_time_s": null,
+        "min_buffer_s": null
+      }
+    },
+    {
+      "scenario": "brief_disturbance",
+      "mode": "measured",
+      "seed": 7,
+      "run_id": "20260925T124411Z-brief_disturbance-measured-s7-4c6f",
+      "summary": {
+        "mode": "measured",
+        "frames_sent": 1199,
+        "frames_delivered": 1199,
+        "frames_lost": 0,
+        "frames_duplicated": 3,
+        "loss_pct": 0.0,
+        "mean_ms": 78.55,
+        "median_ms": 66.7,
+        "p95_ms": 179.85,
+        "p99_ms": 211.84,
+        "max_ms": 400.16,
+        "p95_stable_ms": 160.89,
+        "p95_handoff_ms": 210.39,
+        "inference_latency_gap_ms": 49.51,
+        "p95_crossing_ms": null,
+        "p95_settled_ms": 179.85,
+        "zone_gap_ms": null,
+        "crossing_loss_pct": 0.0,
+        "handoffs": 4,
+        "failed_handoffs": 0,
+        "reconnects": 0,
+        "mean_handoff_ms": 331.68,
+        "state_bytes_transferred": 1199,
+        "time_on_suboptimal_edge_s": 16.75,
+        "longest_gap_ms": 201.71,
+        "profile": "interactive_inspection",
+        "requests_generated": 1199,
+        "results_received": 1199,
+        "results_lost": 0,
+        "unfinished_at_end": 0,
+        "current_response_ms": 48.3,
+        "deadline_ms": 150.0,
+        "late_results": 75,
+        "late_results_pct": 6.26,
+        "late_by_threshold": {
+          "100": {
+            "late": 233,
+            "pct": 19.43
+          },
+          "150": {
+            "late": 75,
+            "pct": 6.26
+          },
+          "200": {
+            "late": 25,
+            "pct": 2.09
+          }
+        },
+        "completed_handovers": 4,
+        "failed_handovers": 0,
+        "server_switches": 4,
+        "path_migrations": 0,
+        "unnecessary_reversals": 2,
+        "reversal_window_s": 10.0,
+        "time_on_suboptimal_server_s": 16.75,
+        "continuity_checks_passed": 8,
+        "continuity_checks_failed": 0,
+        "playback_stalls": null,
+        "playback_stall_time_s": null,
+        "min_buffer_s": null
+      }
+    },
+    {
+      "scenario": "brief_disturbance",
+      "mode": "predictive",
+      "seed": 17,
+      "run_id": "20260925T124513Z-brief_disturbance-predictive-s17-fb0e",
+      "summary": {
+        "mode": "predictive",
+        "frames_sent": 1198,
+        "frames_delivered": 1198,
+        "frames_lost": 0,
+        "frames_duplicated": 4,
+        "loss_pct": 0.0,
+        "mean_ms": 77.68,
+        "median_ms": 68.27,
+        "p95_ms": 157.53,
+        "p99_ms": 202.9,
+        "max_ms": 364.41,
+        "p95_stable_ms": 154.01,
+        "p95_handoff_ms": 225.26,
+        "inference_latency_gap_ms": 71.25,
+        "p95_crossing_ms": null,
+        "p95_settled_ms": 157.53,
+        "zone_gap_ms": null,
+        "crossing_loss_pct": 0.0,
+        "handoffs": 3,
+        "failed_handoffs": 0,
+        "reconnects": 0,
+        "mean_handoff_ms": 294.17,
+        "state_bytes_transferred": 901,
+        "time_on_suboptimal_edge_s": 13.0,
+        "longest_gap_ms": 216.85,
+        "profile": "interactive_inspection",
+        "requests_generated": 1198,
+        "results_received": 1198,
+        "results_lost": 0,
+        "unfinished_at_end": 1,
+        "current_response_ms": 81.4,
+        "deadline_ms": 150.0,
+        "late_results": 78,
+        "late_results_pct": 6.51,
+        "late_by_threshold": {
+          "100": {
+            "late": 206,
+            "pct": 17.2
+          },
+          "150": {
+            "late": 78,
+            "pct": 6.51
+          },
+          "200": {
+            "late": 14,
+            "pct": 1.17
+          }
+        },
+        "completed_handovers": 3,
+        "failed_handovers": 0,
+        "server_switches": 3,
+        "path_migrations": 2,
+        "unnecessary_reversals": 1,
+        "reversal_window_s": 10.0,
+        "time_on_suboptimal_server_s": 13.0,
+        "continuity_checks_passed": 6,
+        "continuity_checks_failed": 0,
+        "playback_stalls": null,
+        "playback_stall_time_s": null,
+        "min_buffer_s": null
+      }
+    }
+  ],
+  "comparisons": [
+    "20260925T124513Z-brief_disturbance-0f1f"
+  ],
+  "aggregate": [
+    {
+      "scenario": "brief_disturbance",
+      "mode": "predictive",
+      "n": 2,
+      "seeds": [
+        7,
+        17
+      ],
+      "run_ids": [
+        "20260925T124308Z-brief_disturbance-predictive-s7-75b2",
+        "20260925T124513Z-brief_disturbance-predictive-s17-fb0e"
+      ],
+      "metrics": {
+        "late_results_pct": {
+          "mean": 6.59,
+          "median": 6.59,
+          "minimum": 6.51,
+          "maximum": 6.67,
+          "sample_sd": 0.1131370849898477
+        },
+        "p95_ms": {
+          "mean": 169.29000000000002,
+          "median": 169.29000000000002,
+          "minimum": 157.53,
+          "maximum": 181.05,
+          "sample_sd": 16.631151493507605
+        },
+        "results_lost": {
+          "mean": 0,
+          "median": 0.0,
+          "minimum": 0,
+          "maximum": 0,
+          "sample_sd": 0.0
+        },
+        "unnecessary_reversals": {
+          "mean": 1.5,
+          "median": 1.5,
+          "minimum": 1,
+          "maximum": 2,
+          "sample_sd": 0.7071067811865476
+        },
+        "failed_handovers": {
+          "mean": 0,
+          "median": 0.0,
+          "minimum": 0,
+          "maximum": 0,
+          "sample_sd": 0.0
+        },
+        "longest_gap_ms": {
+          "mean": 173.135,
+          "median": 173.135,
+          "minimum": 129.42,
+          "maximum": 216.85,
+          "sample_sd": 61.82234587913985
+        }
+      }
+    },
+    {
+      "scenario": "brief_disturbance",
+      "mode": "measured",
+      "n": 1,
+      "seeds": [
+        7
+      ],
+      "run_ids": [
+        "20260925T124411Z-brief_disturbance-measured-s7-4c6f"
+      ],
+      "metrics": {
+        "late_results_pct": {
+          "mean": 6.26,
+          "median": 6.26,
+          "minimum": 6.26,
+          "maximum": 6.26,
+          "sample_sd": null
+        },
+        "p95_ms": {
+          "mean": 179.85,
+          "median": 179.85,
+          "minimum": 179.85,
+          "maximum": 179.85,
+          "sample_sd": null
+        },
+        "results_lost": {
+          "mean": 0,
+          "median": 0,
+          "minimum": 0,
+          "maximum": 0,
+          "sample_sd": null
+        },
+        "unnecessary_reversals": {
+          "mean": 2,
+          "median": 2,
+          "minimum": 2,
+          "maximum": 2,
+          "sample_sd": null
+        },
+        "failed_handovers": {
+          "mean": 0,
+          "median": 0,
+          "minimum": 0,
+          "maximum": 0,
+          "sample_sd": null
+        },
+        "longest_gap_ms": {
+          "mean": 201.71,
+          "median": 201.71,
+          "minimum": 201.71,
+          "maximum": 201.71,
+          "sample_sd": null
+        }
+      }
+    }
+  ],
+  "error": ""
+}

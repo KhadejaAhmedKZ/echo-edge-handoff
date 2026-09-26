@@ -1,9 +1,9 @@
 """Explainer - turn every decision into a sentence a person would accept.
 
-An automatic switch with no explanation reads as a glitch. The same switch with
-a reason reads as the system working. Everything below is generated from the
-same numbers the Decision Engine used, so the explanation cannot drift away
-from the actual reason.
+Sentences are generated deterministically from the same numbers the Decision
+Engine used, so the explanation cannot drift away from the actual reason. No
+language model is involved; an optional rephrasing step could be added later,
+but it must never invent reasons, delay a switch or be needed for judging.
 """
 from __future__ import annotations
 
@@ -15,54 +15,49 @@ def _net(nid: str) -> str:
     return NETWORKS[nid].label if nid in NETWORKS else nid
 
 
-def _edge(eid: str) -> str:
-    return EDGES[eid].label if eid in EDGES else eid
+def _srv(eid: str) -> str:
+    return f"Server {eid}" if eid in EDGES else eid
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:] if s else s
 
 
 class Explainer:
     def why_switch(self, current: Candidate, target: Candidate, reason: str) -> str:
-        bits = []
-        if target.network_id != current.network_id:
-            bits.append(f"moving from {_net(current.network_id)} to "
-                        f"{_net(target.network_id)}")
-        if target.edge_id != current.edge_id:
-            bits.append(f"moving inference from {_edge(current.edge_id)} to "
-                        f"{_edge(target.edge_id)}")
-        head = " and ".join(bits) if bits else "adjusting the path"
-
-        delta = current.e2e_ms - target.e2e_ms
-        return (f"{head.capitalize()}. Predicted end-to-end inference goes from "
-                f"{current.e2e_ms:.0f} ms to {target.e2e_ms:.0f} ms "
-                f"({delta:+.0f} ms). {reason.capitalize()}.")
+        return (f"Switching to {_srv(target.edge_id)} over {_net(target.network_id)}: "
+                f"expected response time {target.e2e_ms:.0f} ms instead of "
+                f"{current.e2e_ms:.0f} ms, and the improvement has persisted. "
+                f"{_cap(reason)}.")
 
     def why_stay(self, current: Candidate, reason: str) -> str:
-        return (f"Staying on {_edge(current.edge_id)} over {_net(current.network_id)} "
-                f"at {current.e2e_ms:.0f} ms end-to-end. {reason.capitalize()}.")
+        return (f"Staying on {_srv(current.edge_id)} over {_net(current.network_id)}; "
+                f"expected response time {current.e2e_ms:.0f} ms. {_cap(reason)}.")
 
-    def preparing(self, target: Candidate) -> str:
-        return (f"{_net(target.network_id)} is improving and "
-                f"{_edge(target.edge_id)} is predicted to give lower end-to-end "
-                f"inference. Preparing {_edge(target.edge_id)} now, before the "
-                f"current path degrades.")
+    def preparing(self, current: Candidate, target: Candidate) -> str:
+        return (f"Preparing {_srv(target.edge_id)} over {_net(target.network_id)}: "
+                f"expected response time {target.e2e_ms:.0f} ms instead of "
+                f"{current.e2e_ms:.0f} ms, and the improvement has persisted. "
+                f"{_srv(current.edge_id)} keeps serving until the target is checked.")
 
     def committed(self, source_edge: str, target_edge: str, state_version: int,
                   handoff_ms: float) -> str:
-        return (f"Inference session moved from {_edge(source_edge)} to "
-                f"{_edge(target_edge)}. State version {state_version} transferred "
-                f"and verified; handoff took {handoff_ms:.0f} ms with no session "
-                f"restart.")
+        return (f"The server changed from {_srv(source_edge)} to {_srv(target_edge)}. "
+                f"The session identity and progress continued (state version "
+                f"{state_version} transferred and checked); the switch took "
+                f"{handoff_ms:.0f} ms with no session restart.")
 
     def recovered(self, failed_edge: str, fallback_edge: str, reason: str) -> str:
-        return (f"Handoff to {_edge(failed_edge)} did not complete ({reason}). "
-                f"Falling back to {_edge(fallback_edge)}; the session was never "
-                f"discarded, so nothing had to be rebuilt.")
+        return (f"{_srv(failed_edge)} could not take the session ({reason}). "
+                f"Staying on {_srv(fallback_edge)}, which never stopped serving; "
+                f"nothing had to be rebuilt.")
 
     def trouble(self, diagnosis: dict) -> str:
         head = diagnosis["headline"]
         detail = diagnosis["detail"]
         if diagnosis["cause"] == "healthy":
-            return f"Running normally at {diagnosis['e2e_ms']:.0f} ms end-to-end."
-        sentence = f"Things feel slow because {head}"
+            return f"Running normally; expected response time {diagnosis['e2e_ms']:.0f} ms."
+        sentence = f"Responses are slower because {head}"
         if detail:
             sentence += f" - {detail}"
         return sentence + "."

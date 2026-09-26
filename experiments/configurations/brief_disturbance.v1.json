@@ -1,0 +1,299 @@
+{
+  "controller_defaults": {
+    "agent_tick_s": 0.25,
+    "buffer_hold_s": 4.0,
+    "buffer_target_s": 10.0,
+    "deadline_ms": 150.0,
+    "duration_s": 90.0,
+    "frame_interval_s": 0.05,
+    "mode": "measured",
+    "model_id": "inspection-model-v1",
+    "model_version": "1.0",
+    "playback_start_s": 2.0,
+    "prediction_horizon_s": 2.0,
+    "profile": "interactive_inspection",
+    "request_timeout_s": 2.5,
+    "reversal_window_s": 10.0,
+    "scenario_id": "gradual_coverage",
+    "seed": 7,
+    "segment_s": 1.0,
+    "session_id": "robot-01",
+    "stable_link_hold_s": 0.0,
+    "switch_margin": 0.12,
+    "switch_patience": 3,
+    "tcp_reconnect_timeout_s": 1.2,
+    "warmup_frames": 12,
+    "warmup_penalty_ms": 55.0
+  },
+  "scenario": {
+    "default_duration_s": 60.0,
+    "disturbances": [
+      {
+        "end": 0.52,
+        "jitter_add_ms": 20.0,
+        "label": "Test event: Wi-Fi delay and loss spike",
+        "loss_add": 0.06,
+        "network_id": "wifi",
+        "outage": false,
+        "rtt_add_ms": 140.0,
+        "start": 0.45
+      }
+    ],
+    "faults": [],
+    "id": "brief_disturbance",
+    "route": [
+      0.02,
+      0.16
+    ],
+    "summary": "The robot inspects inside the lab, where Wi-Fi is strong. For about 4 seconds Wi-Fi suffers a delay and loss spike, then recovers fully.",
+    "tests": "Whether the controller avoids switching away and straight back for a problem that fixes itself.",
+    "title": "B - Brief disturbance",
+    "version": 1
+  },
+  "world": {
+    "backhaul_ms": {
+      "cellular": {
+        "A": 22.0,
+        "B": 0.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "satellite": {
+        "A": 45.0,
+        "B": 45.0,
+        "C": 0.0,
+        "D": 45.0
+      },
+      "wifi": {
+        "A": 0.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 22.0
+      },
+      "wired": {
+        "A": 22.0,
+        "B": 22.0,
+        "C": 45.0,
+        "D": 0.0
+      }
+    },
+    "networks": {
+      "cellular": {
+        "best": [
+          22.0,
+          3.0,
+          0.0008,
+          200.0
+        ],
+        "colour": "#ff6b00",
+        "coverage": [
+          [
+            0.0,
+            0.42
+          ],
+          [
+            0.16,
+            0.68
+          ],
+          [
+            0.34,
+            0.95
+          ],
+          [
+            0.52,
+            0.88
+          ],
+          [
+            0.66,
+            0.44
+          ],
+          [
+            0.8,
+            0.22
+          ],
+          [
+            1.0,
+            0.18
+          ]
+        ],
+        "emulated": true,
+        "label": "Private 5G",
+        "worst": [
+          120.0,
+          25.0,
+          0.08,
+          10.0
+        ]
+      },
+      "satellite": {
+        "best": [
+          520.0,
+          25.0,
+          0.004,
+          60.0
+        ],
+        "colour": "#ffb27a",
+        "coverage": [
+          [
+            0.0,
+            0.52
+          ],
+          [
+            0.45,
+            0.62
+          ],
+          [
+            0.72,
+            0.7
+          ],
+          [
+            1.0,
+            0.6
+          ]
+        ],
+        "emulated": true,
+        "label": "Satellite-like backup (emulated)",
+        "worst": [
+          780.0,
+          60.0,
+          0.04,
+          8.0
+        ]
+      },
+      "wifi": {
+        "best": [
+          12.0,
+          2.0,
+          0.0005,
+          300.0
+        ],
+        "colour": "#ffffff",
+        "coverage": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.18,
+            0.96
+          ],
+          [
+            0.3,
+            0.58
+          ],
+          [
+            0.42,
+            0.16
+          ],
+          [
+            0.52,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ]
+        ],
+        "emulated": true,
+        "label": "Indoor Wi-Fi",
+        "worst": [
+          180.0,
+          35.0,
+          0.18,
+          8.0
+        ]
+      },
+      "wired": {
+        "best": [
+          1.5,
+          0.2,
+          1e-05,
+          1000.0
+        ],
+        "colour": "#8e8e96",
+        "coverage": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.8,
+            0.0
+          ],
+          [
+            0.86,
+            0.92
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "emulated": true,
+        "label": "Wired dock",
+        "worst": [
+          6.0,
+          1.5,
+          0.001,
+          400.0
+        ]
+      }
+    },
+    "servers": {
+      "A": {
+        "base_processing_ms": 26.0,
+        "home_network": "wifi",
+        "label": "Server A - indoor lab",
+        "load_penalty_ms": 4.0,
+        "site_position": 0.1
+      },
+      "B": {
+        "base_processing_ms": 21.0,
+        "home_network": "cellular",
+        "label": "Server B - yard",
+        "load_penalty_ms": 4.0,
+        "site_position": 0.4
+      },
+      "C": {
+        "base_processing_ms": 15.0,
+        "home_network": "satellite",
+        "label": "Server C - remote",
+        "load_penalty_ms": 3.0,
+        "site_position": 0.7
+      },
+      "D": {
+        "base_processing_ms": 12.0,
+        "home_network": "wired",
+        "label": "Server D - dock",
+        "load_penalty_ms": 3.0,
+        "site_position": 0.95
+      }
+    },
+    "zones": [
+      [
+        0.0,
+        "Zone A - indoor lab"
+      ],
+      [
+        0.3,
+        "Zone A/B - corridor"
+      ],
+      [
+        0.42,
+        "Zone B - yard"
+      ],
+      [
+        0.62,
+        "Zone B/C - perimeter"
+      ],
+      [
+        0.74,
+        "Zone C - far perimeter"
+      ],
+      [
+        0.86,
+        "Zone D - dock"
+      ]
+    ]
+  }
+}

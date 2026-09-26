@@ -3,930 +3,1219 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ECHO - Edge Compute Handoff Orchestration</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<title>ECHO Inspection Mission</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%23ff6b00%22/%3E%3C/svg%3E">
 <style>
+/* Everything is local: no fonts, scripts or styles from the network. */
 :root{
-  --bg:#0b0b0d; --panel:#141417; --panel2:#1b1b1f; --raise:#232328;
-  --line:#2c2c32; --line2:#3a3a42;
-  --orange:#ff6b00; --orange-pale:#ffb27a;
-  --white:#ffffff; --text:#ececef; --muted:#8a8a93; --dim:#5c5c65;
-  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+  --bg:#0c0c0e; --panel:#151518; --panel2:#1c1c20; --raise:#24242a;
+  --line:#2d2d34; --line2:#3b3b44;
+  --text:#ededf0; --muted:#a2a2ab; --dim:#6f6f78;
+  --accent:#ff6b00;            /* EDGE orange: ECHO actions and primary buttons */
+  /* network identity (categorical, validated order) */
+  --net-wifi:#3987e5; --net-cellular:#d95926; --net-satellite:#199e70; --net-wired:#c98500;
+  /* status (reserved; always with a word or icon) */
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --series:#3987e5;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-  font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
-canvas{display:block}
-#scene{position:fixed;inset:0;z-index:0}
-.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:radial-gradient(115% 85% at 50% 12%,transparent 42%,rgba(11,11,13,.88) 100%)}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+a{color:inherit}
+.wrap{max-width:1500px;margin:0 auto;padding:12px 16px 40px}
 
-/* ---------- layout: a strict grid, nothing floats over anything ---------- */
-.hud{position:fixed;inset:0;z-index:2;display:grid;
-  grid-template-columns:318px minmax(0,1fr) 392px;
-  grid-template-rows:auto minmax(0,1fr) auto;
-  gap:12px;padding:12px;pointer-events:none}
-.hud > *{pointer-events:auto;min-height:0;min-width:0}
-.topbar{grid-column:1/4;grid-row:1}
-.left{grid-column:1;grid-row:2}
-.centre{grid-column:2;grid-row:2;pointer-events:none;display:flex;flex-direction:column;gap:12px}
-.right{grid-column:3;grid-row:2}
-.bottom{grid-column:1/4;grid-row:3;display:flex;gap:12px;align-items:stretch}
-.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+/* header */
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 0 12px;
+  border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:20px;letter-spacing:.02em}
+.brand b span{color:var(--accent)}
+.brand small{color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+  font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.badge.live{color:#fff;border-color:var(--crit);background:rgba(208,59,59,.18)}
+.badge.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--crit);
+  animation:pulse 1.2s infinite}
+.badge.replay{color:#fff;border-color:var(--series);background:rgba(57,135,229,.16)}
+.badge.imported{color:#fff;border-color:var(--warn);background:rgba(250,178,25,.12)}
+@keyframes pulse{50%{opacity:.25}}
+.truth{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.truth span{font-size:11px;color:var(--muted);border:1px dashed var(--line2);border-radius:6px;padding:2px 7px}
+.truth b{color:var(--text);font-weight:600}
 
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
-  display:flex;flex-direction:column;min-height:0;
-  box-shadow:0 10px 34px rgba(0,0,0,.5)}
-.panel > h3{margin:0;padding:9px 12px;font-size:10px;letter-spacing:.15em;
-  text-transform:uppercase;color:var(--muted);font-weight:600;
-  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex:none}
-.panel > h3 em{font-style:normal;color:var(--dim);letter-spacing:.04em;
-  text-transform:none;font-weight:400;font-size:10px;margin-left:auto}
-.body{padding:9px;display:flex;flex-direction:column;gap:7px;overflow-y:auto;min-height:0}
-.body::-webkit-scrollbar{width:6px}
-.body::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
-.body::-webkit-scrollbar-track{background:transparent}
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;padding:12px 0}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:11px;color:var(--muted);letter-spacing:.04em}
+select,input[type=number]{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;
+  padding:6px 8px;min-width:0}
+input[type=number]{width:80px}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:6px 12px;
+  cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#111;font-weight:700}
+.btn.small{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.sep{width:1px;align-self:stretch;background:var(--line)}
+.replaybar{display:none;align-items:center;gap:8px;flex:1 1 360px}
+.replaybar.on{display:flex}
+.replaybar input[type=range]{flex:1;accent-color:var(--series)}
+.clock{font-family:var(--mono);color:var(--muted);min-width:92px;text-align:right}
 
-/* ---------- top bar ---------- */
-.topbar{display:flex;align-items:center;gap:14px;padding:9px 13px;flex-direction:row}
-.brand{display:flex;align-items:center;gap:10px;flex:none}
-.brand b{font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--white)}
-.brand .dash{width:22px;height:4px;background:var(--orange);border-radius:1px}
-.brand span{font-size:10px;color:var(--muted);letter-spacing:.09em;max-width:150px;line-height:1.25}
-.seg{display:flex;gap:2px;background:var(--panel2);border:1px solid var(--line);
-  border-radius:8px;padding:2px;flex:none}
-.seg button{background:none;border:0;color:var(--muted);font-family:var(--sans);
-  font-size:11.5px;font-weight:500;padding:7px 14px;border-radius:6px;cursor:pointer;
-  transition:.15s;white-space:nowrap}
-.seg button:hover{color:var(--text);background:var(--raise)}
-.seg button.on{background:var(--orange);color:#0b0b0d;font-weight:600}
-.btn{background:var(--panel2);border:1px solid var(--line2);color:var(--text);
-  font-family:var(--sans);font-size:11.5px;font-weight:500;padding:8px 15px;
-  border-radius:7px;cursor:pointer;transition:.15s;flex:none}
-.btn:hover{background:var(--raise);border-color:var(--muted)}
-.btn.primary{background:var(--orange);border-color:var(--orange);color:#0b0b0d;font-weight:600}
-.btn.primary:hover{background:#ff7d1f}
-.spacer{flex:1}
-.stat{display:flex;flex-direction:column;gap:1px;flex:none}
-.stat i{font-style:normal;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
-.stat b{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--white)}
-.stat b.hot{color:var(--orange)}
-.chip{font-family:var(--mono);font-size:10.5px;padding:6px 11px;border-radius:6px;
-  background:var(--panel2);border:1px solid var(--line2);color:var(--text);white-space:nowrap;flex:none}
+/* intro */
+.intro{background:linear-gradient(180deg,#1b1b20,#151518);border:1px solid var(--line2);border-radius:12px;
+  padding:16px 18px;margin:4px 0 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px}
+.intro h2{margin:0 0 6px;font-size:18px}
+.intro p{margin:0 0 6px;color:var(--muted);max-width:900px}
+.intro ol{margin:6px 0 0;padding-left:20px;color:var(--text)}
+.intro ol li{margin:2px 0}
+.intro .cta{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.intro.hidden{display:none}
+.scenario-note{color:var(--muted);font-size:13px;margin:0 0 10px}
+.scenario-note b{color:var(--text)}
 
-/* ---------- network cards ---------- */
-.net{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--nc);
-  border-radius:8px;padding:8px 9px;transition:.2s}
-.net.active{background:var(--raise);border-color:var(--line2);border-left-color:var(--orange);
-  box-shadow:inset 0 0 0 1px rgba(255,107,0,.22)}
-.net.down{opacity:.4}
-.nh{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.nh .nm{font-size:12.5px;font-weight:600;flex:1;color:var(--white)}
-.nh .badge{font-family:var(--mono);font-size:8px;letter-spacing:.1em;padding:3px 6px;
-  border-radius:4px;background:var(--raise);color:var(--muted);border:1px solid var(--line2)}
-.nh .badge.live{background:var(--orange);color:#0b0b0d;border-color:var(--orange);font-weight:700}
-.nh .badge.dead{background:transparent;color:var(--dim);border-style:dashed}
+/* grid */
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px}
+.full{grid-column:1/-1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;min-width:0}
+.panel>h3{margin:0;padding:9px 13px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.panel>h3 .q{letter-spacing:0;text-transform:none;color:var(--dim);font-weight:400;font-size:12px;margin-left:auto}
+.body{padding:11px 13px}
 
-.sig{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.sig .track{flex:1;height:6px;border-radius:3px;background:#0e0e11;overflow:hidden;
-  border:1px solid var(--line)}
-.sig .track i{display:block;height:100%;background:var(--nc);transition:width .3s}
-.sig .pct{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--white);width:34px;text-align:right}
-.trend{font-family:var(--mono);font-size:8.5px;color:var(--dim);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
-.trend.bad{color:var(--orange)}
-.trend.good{color:var(--white)}
+/* map */
+#map{width:100%;height:auto;display:block}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);padding:0 13px 10px}
+.maplegend i{display:inline-block;width:22px;height:0;border-top:2px solid var(--text);vertical-align:middle;margin-right:5px}
+.maplegend i.dash{border-top-style:dashed}
+.maplegend i.mute{border-top-color:var(--dim)}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 13px 12px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px;min-width:0}
+.card .t{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .t .sw{width:10px;height:10px;border-radius:2px;flex:none}
+.card .v{font-family:var(--mono);color:var(--muted);margin-top:3px}
+.card.inuse{border-color:var(--text)}
+.card.down{opacity:.55}
+.tag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:1px 5px;border-radius:4px;
+  border:1px solid var(--line2);color:var(--muted);margin-left:auto;flex:none}
+.tag.serving{color:#111;background:var(--text);border-color:var(--text)}
+.tag.cand{color:var(--accent);border-color:var(--accent);border-style:dashed}
+.tag.down{color:var(--crit);border-color:var(--crit)}
+.tag.test{color:var(--warn);border-color:var(--warn)}
 
-.chars{display:flex;flex-direction:column;gap:4px}
-.ch{display:grid;grid-template-columns:54px 1fr 54px;align-items:center;gap:6px}
-.ch label{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
-.ch .track{height:4px;border-radius:2px;background:#0e0e11;overflow:hidden;border:1px solid var(--line)}
-.ch .track i{display:block;height:100%;transition:width .3s}
-.ch b{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--text);text-align:right}
-.fill-bad{background:var(--orange)}
-.fill-good{background:var(--white)}
+/* experience */
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;
+  cursor:pointer;text-align:left}
+.kpi:hover{border-color:var(--line2)}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px}
+.kpi .n small{font-size:13px;color:var(--muted);font-weight:500;margin-left:3px}
+.kpi .s{font-size:11.5px;color:var(--dim)}
+.kpi.hero{grid-column:1/-1;display:flex;align-items:center;gap:14px}
+.kpi.hero .n{font-size:38px}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid}
+.status.ok{color:var(--good);border-color:var(--good)}
+.status.late{color:var(--warn);border-color:var(--warn)}
+.status.lost{color:var(--crit);border-color:var(--crit)}
+.thresh{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0 0}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:3px 10px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--raise);color:var(--text);font-weight:700}
+.buffer{margin-top:10px}
+.bufbar{height:12px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.bufbar i{display:block;height:100%;background:var(--series);width:0;transition:width .2s}
+.hint{font-size:11.5px;color:var(--dim)}
 
-/* ---------- edge strip across the top of the scene ---------- */
-.edgestrip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;pointer-events:auto;flex:none}
-.edge{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 10px;
-  transition:.2s;box-shadow:0 10px 30px rgba(0,0,0,.45)}
-.edge.active{border-color:var(--orange);background:#1d1409;
-  box-shadow:0 0 0 1px var(--orange),0 10px 30px rgba(255,107,0,.16)}
-.edge.target{border-color:var(--white);border-style:dashed;animation:blink 1.1s ease-in-out infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.55}}
-.eh{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.eh .eid{font-family:var(--mono);font-size:12px;font-weight:700;width:19px;height:19px;
-  display:grid;place-items:center;border-radius:5px;background:var(--raise);color:var(--text);flex:none}
-.edge.active .eh .eid{background:var(--orange);color:#0b0b0d}
-.eh .en{font-size:11.5px;font-weight:600;color:var(--white);flex:1;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
-.eh .est{font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--dim)}
-.edge.active .eh .est{color:var(--orange)}
-.edge.target .eh .est{color:var(--white)}
-.emet{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.emet div{display:flex;flex-direction:column;gap:1px}
-.emet span{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
-.emet b{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--text)}
+/* chart */
+.chartwrap{position:relative;padding:4px 13px 10px}
+#chart{width:100%;height:250px;display:block;cursor:crosshair}
+.tip{position:absolute;pointer-events:none;background:#000;border:1px solid var(--line2);border-radius:7px;
+  padding:6px 8px;font-size:12px;display:none;white-space:nowrap;z-index:5}
+.chartlegend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);padding:0 13px 10px}
+.chartlegend span{display:inline-flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.vl{width:0;height:12px;border-left:2px solid;display:inline-block}
 
-/* ---------- agent pipeline ---------- */
-#agents{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
-.agent{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
-  padding:6px 8px 7px;transition:.2s;min-width:0}
-.agent.on{background:var(--raise);border-color:var(--orange);
-  box-shadow:inset 0 0 0 1px rgba(255,107,0,.2)}
-.ah{display:flex;align-items:center;gap:5px;margin-bottom:2px}
-.ah .num{font-family:var(--mono);font-size:8.5px;font-weight:700;width:15px;height:15px;
-  display:grid;place-items:center;border-radius:4px;background:#0e0e11;
-  border:1px solid var(--line2);color:var(--muted);flex:none}
-.agent.on .ah .num{background:var(--orange);color:#0b0b0d;border-color:var(--orange)}
-.ah .an{font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--white);flex:1}
-.ah .pulse{width:5px;height:5px;border-radius:50%;background:var(--dim);flex:none}
-.agent.on .ah .pulse{background:var(--orange);box-shadow:0 0 8px var(--orange);
-  animation:beat 1.3s ease-in-out infinite}
-@keyframes beat{0%,100%{opacity:1}50%{opacity:.35}}
-.aq{font-size:7.5px;color:var(--dim);margin-bottom:3px;line-height:1.2;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.av{font-family:var(--mono);font-size:8.5px;line-height:1.38;color:var(--text);
-  word-break:break-word}
-.av .k{color:var(--orange)}
-.av .g{color:var(--muted)}
+/* decision */
+.action{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.act{font-weight:800;font-size:15px;padding:3px 10px;border-radius:7px;border:1px solid var(--line2)}
+.act.hold{color:var(--muted)}
+.act.move{color:#111;background:var(--accent);border-color:var(--accent)}
+.act.recon{color:#fff;background:var(--crit);border-color:var(--crit)}
+.reason{color:var(--muted);margin-top:6px}
+.explain{margin-top:8px;padding:9px 11px;border-left:3px solid var(--accent);background:var(--panel2);border-radius:0 7px 7px 0;font-size:14.5px}
+details{margin-top:8px}
+details summary{cursor:pointer;color:var(--muted);font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11.5px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.tablewrap{overflow-x:auto}
 
+/* handoff steps */
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.step{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--panel2);min-width:0}
+.step .k{font-weight:700;font-size:13px}
+.step .d{font-size:11px;color:var(--dim);margin-top:1px;min-height:28px}
+.step .ms{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
+.step.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.step.done{border-color:var(--good)}
+.step.done .k::after{content:" ✓";color:var(--good)}
+.step.failed{border-color:var(--crit)}
+.step.failed .k::after{content:" ✕";color:var(--crit)}
+.hstate{margin-top:8px;font-size:13px;color:var(--muted)}
+.hstate b{color:var(--text)}
+.testevent{margin-top:8px;padding:7px 10px;border:1px dashed var(--warn);border-radius:7px;color:var(--warn);font-size:13px;display:none}
 
-/* ---------- log ---------- */
-.log{flex:none;max-height:170px}
-.ev{font-family:var(--mono);font-size:9.5px;line-height:1.45;color:var(--muted);
-  display:flex;gap:7px;padding-bottom:4px;border-bottom:1px solid #1a1a1e}
-.ev b{color:var(--white);font-weight:600;flex:none}
-.ev.hi b{color:var(--orange)}
-.ev.hi span{color:var(--text)}
+/* continuity */
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis}
+.verdict{margin-top:9px;padding:8px 10px;border-radius:7px;border:1px solid var(--line2);font-size:13px}
+.verdict.ok{border-color:var(--good)}
+.verdict.bad{border-color:var(--crit)}
+.verdict .h{font-weight:700}
+.verdict.ok .h{color:var(--good)}
+.verdict.bad .h{color:var(--crit)}
+.verdict .p{color:var(--muted);font-size:12px;margin-top:3px}
 
-/* ---------- bottom ---------- */
-.why{flex:1;padding:11px 14px;gap:8px;min-width:0}
-.why .lbl{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
-.why .txt{font-size:14px;line-height:1.45;color:var(--white);font-weight:500}
-.pipeline{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
-.step{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;padding:4px 9px;border-radius:4px;
-  background:var(--panel2);color:var(--dim);border:1px solid var(--line);transition:.2s}
-.step.done{color:var(--muted);border-color:var(--line2)}
-.step.on{background:var(--orange);color:#0b0b0d;border-color:var(--orange);font-weight:700}
-.metrics{width:326px;flex:none;padding:10px 12px}
-.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.mgrid div{display:flex;flex-direction:column;gap:1px}
-.mgrid span{font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
-.mgrid b{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--white)}
-#spark{width:100%;height:40px;margin-top:9px;display:block}
-.hint{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);z-index:3;font-size:9px;
-  color:var(--dim);letter-spacing:.07em;pointer-events:none}
-@media (max-width:1440px){.hud{grid-template-columns:282px minmax(0,1fr) 344px}.metrics{width:282px}}
+/* timeline */
+.log{max-height:300px;overflow-y:auto;font-size:12.5px}
+.log div{display:grid;grid-template-columns:52px 16px minmax(0,1fr);gap:6px;padding:3px 0;border-bottom:1px solid var(--line)}
+.log .t{font-family:var(--mono);color:var(--dim);text-align:right}
+.log .ic{text-align:center}
+.log .zone{color:var(--muted)}
+.log .srv{color:var(--text);font-weight:600}
+.log .fail{color:var(--crit)}
+.log .test{color:var(--warn)}
+
+/* comparison / evidence */
+.cmpcell{background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;text-decoration:underline dotted var(--dim);text-underline-offset:3px}
+.cmpcell:hover{color:var(--accent)}
+.prov{margin-top:10px;padding:10px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);display:none;font-size:13px}
+.prov.on{display:block}
+.prov code{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all}
+.origin{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:4px;border:1px solid var(--line2)}
+.origin.live{color:var(--good);border-color:var(--good)}
+.origin.imported{color:var(--warn);border-color:var(--warn)}
+.muted{color:var(--muted)}
+.statuslist{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.st{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.st .h{display:flex;gap:8px;align-items:center;font-weight:600}
+.st .h .origin{margin-left:auto}
+.st p{margin:4px 0 0;color:var(--muted)}
+.origin.implemented{color:var(--good);border-color:var(--good)}
+.origin.emulated,.origin.simulated{color:var(--series);border-color:var(--series)}
+.origin.separate{color:var(--muted)}
+.origin.proposed{color:var(--warn);border-color:var(--warn)}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#000;border:1px solid var(--line2);
+  border-radius:8px;padding:8px 14px;display:none;z-index:10}
+
+@media (max-width:1100px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .intro{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:640px){
+  .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpis{grid-template-columns:minmax(0,1fr)}
+  .truth{margin-left:0}
+}
 </style>
+<link rel="stylesheet" href="/assets/mission.css?v=13">
 </head>
 <body>
-<canvas id="scene"></canvas>
-<div class="vignette"></div>
+<div class="wrap">
 
-<div class="hud">
-  <div class="panel topbar">
-    <div class="brand"><b>ECHO</b><i class="dash"></i><span>EDGE COMPUTE HANDOFF ORCHESTRATION</span></div>
-    <div class="seg" id="modes">
-      <button data-mode="tcp">TCP baseline</button>
-      <button data-mode="quic">QUIC only</button>
-      <button data-mode="echo" class="on">QUIC + ECHO</button>
-    </div>
-    <button class="btn primary" id="start">Run</button>
-    <button class="btn" id="stop">Stop</button>
-    <button class="btn" id="replay">Replay</button>
-    <div class="spacer"></div>
-    <div class="stat"><i>elapsed</i><b id="t">0.0s</b></div>
-    <div class="stat"><i>end-to-end</i><b id="e2e" class="hot">-</b></div>
-    <div class="chip" id="zone">standing by</div>
+<header>
+  <div class="brand"><b><span>ECHO</span></b><small>MISSION CONTROL / 01</small></div>
+  <span id="modeBadge" class="badge">Idle</span>
+  <div class="truth" title="What is real and what is not, in this experiment">
+    <span>Network: <b>emulated</b></span><span>Processing: <b>simulated</b></span>
+    <span>QUIC transport: <b>real</b></span><span>Tracking state: <b>synthetic</b></span>
   </div>
+</header>
 
-  <div class="col left">
-    <div class="panel" style="flex:1">
-      <h3>Access networks <em>all four watched, always</em></h3>
-      <div class="body" id="nets"></div>
-    </div>
-  </div>
-
-  <div class="centre">
-    <div class="edgestrip" id="edges"></div>
-    <div style="flex:1"></div>
-  </div>
-
-  <div class="col right">
-    <div class="panel" style="flex:1">
-      <h3>Agent pipeline <em id="tick">every 250 ms</em></h3>
-      <div class="body" id="agents"></div>
-    </div>
-    <div class="panel log">
-      <h3>Decision log</h3>
-      <div class="body" id="log" style="gap:5px"></div>
-    </div>
-  </div>
-
-  <div class="bottom">
-    <div class="panel why">
-      <div class="lbl">Why this is happening</div>
-      <div class="txt" id="why">Pick a mode and press Run. The same route, the same four networks and the same workload are used for all three.</div>
-      <div class="pipeline" id="pipeline"></div>
-    </div>
-    <div class="panel metrics">
-      <div class="mgrid">
-        <div><span>frames</span><b id="mf">0</b></div>
-        <div><span>lost</span><b id="ml">0</b></div>
-        <div><span>handoffs</span><b id="mh">0</b></div>
-        <div><span>reconn</span><b id="mr">0</b></div>
-      </div>
-      <canvas id="spark"></canvas>
-    </div>
+<div class="controls">
+  <div class="field"><label for="selScenario">Scenario</label><select id="selScenario"></select></div>
+  <div class="field"><label for="selMode">Controller</label><select id="selMode"></select></div>
+  <div class="field"><label for="selProfile">Application profile</label><select id="selProfile"></select></div>
+  <div class="field"><label for="inSeed">Seed</label><input id="inSeed" type="number" min="0" max="999999" value="7"></div>
+  <button class="btn primary" id="btnStart">Run live experiment</button>
+  <button class="btn" id="btnStop" disabled>Stop</button>
+  <button class="btn" id="btnCompare" title="Runs all four controllers one after another under identical settings">Run all four controllers</button>
+  <div class="sep"></div>
+  <div class="replaybar" id="replayBar">
+    <button class="btn" id="btnPlay">Pause</button>
+    <span class="hint">Replay speed</span><div class="seg" id="speedSeg" role="group" aria-label="Replay speed"><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button><button data-s="8">8×</button></div>
+    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Replay position">
+    <span class="clock" id="clock">0.0 s</span><span class="hint" id="playbackStatus" role="status" aria-live="polite"></span>
   </div>
 </div>
-<div class="hint">drag to orbit &middot; scroll to zoom &middot; F toggles follow camera</div>
+<section class="command-hero site-mode" aria-label="ECHO mission control">
+ <div class="view-toolbar"><div><span class="eyebrow">ECHO / INSPECTION MISSION</span><strong id="siteZone">Robot ready at start</strong></div><span class="hint">Earth & location prediction ↓ below the mission</span></div>
+ <div class="visual-stage">
+  <div class="robot-view"><div class="mini-earth"><canvas id="miniEarthCanvas" aria-label="Small Earth and satellite view"></canvas><span>EARTH & SATELLITES<small>Full view and prediction below ↓</small></span></div><aside class="site-networks"><h3>ACCESS NETWORKS <small>all four monitored</small></h3><div id="siteNetworks"></div></aside><aside class="site-decisions"><h3>AGENT PIPELINE</h3><a class="agents-jump" href="#agentsSection">See all nine agents ↓</a><div class="site-step"><small>01 / OBSERVE</small><strong id="siteObserve">Waiting for measurements</strong></div><div class="site-step"><small>02 / DECIDE</small><strong id="siteAction">No mission loaded</strong><p id="siteReason">Choose a scenario and run or replay a mission.</p></div><div class="site-step"><small>03 / HANDOVER</small><strong id="siteHandoff">No transfer in progress</strong><p>Keep the old server serving until the next one is checked.</p></div></aside><div class="scene-label">02 / INSPECTION UNIT<span id="robotRunState">AWAITING MISSION</span></div><canvas id="robotCanvas" aria-label="3D quadruped robot on the simulated mission route"></canvas><div class="robot-caption"><span id="robotLocation">READY AT START</span><small>Drag to orbit · schematic robot and site</small></div></div>
+ </div>
+ <div class="mission-strip"><div><span>ACTIVE NETWORK</span><strong id="heroNetwork">Awaiting data</strong></div><div><span>PROCESSING SERVER</span><strong id="heroServer">—</strong></div><div><span>MISSION PROGRESS</span><strong id="heroProgress">—</strong></div><div class="experience"><span>APPLICATION EXPERIENCE</span><strong id="heroExperience">Start or replay a mission</strong></div></div>
+ <p id="visualFallback" hidden>3D view unavailable on this browser. The mission map and all experiment controls below remain available.</p>
+</section>
+
+<section class="agents-section" id="agentsSection" aria-label="ECHO agents">
+ <div class="agents-heading"><div><div class="eyebrow">HOW ECHO MAKES A DECISION</div><h2>Nine agents. One handover.</h2></div><p id="agentsMode">Start a run or replay to see each agent's actual output.</p></div>
+ <p class="agents-summary">Watch the links → understand the workload → compare options → approve a move → transfer the session.<br>Recovery handles failures; the troubleshooter and explainer make the reasoning visible.</p>
+ <div class="agent-columns" aria-hidden="true"><span>Agent / responsibility</span><span>Latest output from this run</span><span>Evidence</span></div>
+ <div id="agentRows"></div>
+ <p class="hint">These are software components, not nine language models. Intent and prediction are reported inside observation and scoring events. The separate trained Random Forest below is advisory and does not control this pipeline.</p>
+</section>
+
+<section class="orbit-section" aria-label="Location and satellite prediction">
+ <div class="orbit-heading"><div class="eyebrow">02 / LOCATION INTELLIGENCE</div><h2>Location & connectivity forecast</h2><p>Where the robot is going—and where satellites will be—helps us prepare before a connection fades.</p></div>
+ <div class="orbit-layout">  <div class="earth-view"><div class="orbit-controls"><button id="earthFocus">Focus Earth</button><button id="earthCloser" aria-label="Zoom into Earth">+</button><button id="earthFarther" aria-label="Zoom out from Earth">−</button></div><div class="scene-label">01 / ORBITAL CONTEXT<span>CACHED ORBITAL SNAPSHOT</span></div><canvas id="earthCanvas" aria-label="Interactive 3D Earth, illustrative context"></canvas><div class="earth-caption"><i></i> UAE INDUSTRIAL INSPECTION<br><small><span id="orbitCaption">Loading cached satellite positions…</span></small></div></div>
+
+ <div class="orbit-intelligence">
+  <article><span class="eyebrow">SATELLITE VISIBILITY · ORBITAL CALCULATION</span><h3 id="orbitalTarget">Connecting to your satellite service…</h3><p id="orbitalExplanation">Using the configured N2YO key on the server. Credentials never enter this page.</p><div class="orbit-values"><div><small>TIME TO 10° ELEVATION</small><b id="orbitalTime">—</b></div><div><small>NEXT CANDIDATE</small><b id="orbitalNext">—</b></div></div><p class="hint" id="orbitalFreshness"></p></article>
+  <article><span class="eyebrow">YOUR TRAINED ML MODEL · CELLULAR HANDOVER</span><h3 id="modelProbability">Loading Random Forest…</h3><p id="modelDecision"></p><p id="modelInputs" class="hint"></p><p id="modelMetrics" class="hint"></p><button class="btn small" id="nextModelSample">Next held-out example</button><p class="hint">Model inference uses held-out synthetic cellular data. It does not choose a satellite or control this robot mission.</p></article>
+ </div></div>
+ <div class="prediction-steps"><article><b>01 · Know the location</b><p>For satellite visibility, the current reference is Abu Dhabi (24.4539° N, 54.3773° E). For a moving robot, deployment would supply its GPS position, speed and direction continuously.</p></article><article><b>02 · Look ahead</b><p>The orbital calculation projects satellites forward and estimates when a tracked satellite drops below 10° above the horizon. Your ML model separately uses position, movement, signal quality and network load to estimate whether a cellular handover is needed.</p></article><article><b>03 · Prepare, then verify</b><p>A deployed controller would combine those forecasts with measured link quality and server readiness. This prototype demonstrates session preparation and transfer, but satellite forecasts and the trained ML model remain advisory.</p></article></div>
+</section>
+
+<section class="intro" id="intro">
+  <div>
+    <h2>The mission: keep inspection results arriving as connections change.</h2>
+    <p>It streams camera frames to a nearby server and needs each result back within a deadline. As it moves,
+      indoor Wi-Fi fades, private 5G and a wired dock become useful, and each network reaches a different server best.</p>
+    <ol>
+      <li><b>Watch the connection deteriorate</b> on the mission map and the response-time chart.</li>
+      <li><b>See ECHO prepare another server</b> (dashed line) while the current one keeps serving.</li>
+      <li><b>See the application continue</b>: same session, progress carried over, results still arriving.</li>
+      <li><b>Compare</b> with the three alternative controllers below, and download the evidence behind every number.</li>
+    </ol>
+  </div>
+  <div class="cta">
+    <button class="btn primary" id="btnIntroReplay">Replay recorded mission</button>
+    <button class="btn" id="btnIntroLive">Run it live (about 90 s)</button>
+    <button class="btn small" id="btnIntroHide">Hide</button>
+  </div>
+</section>
+
+<p class="scenario-note" id="scenarioNote"></p>
+
+<div class="grid">
+
+  <!-- 1. What is the robot doing? 2. What is changing? -->
+  <section class="panel">
+    <h3>Mission route and robot <span class="q">What is the robot doing? What is changing?</span></h3>
+    <svg id="map" viewBox="0 0 1000 300" role="img" aria-label="Mission map"></svg>
+    <div class="maplegend">
+      <span><i></i>serving requests</span>
+      <span><i class="dash" style="border-color:var(--accent)"></i>candidate being prepared</span>
+      <span><i class="mute"></i>network unavailable</span>
+      <span id="zoneNow"></span>
+    </div>
+    <div class="cards" id="netCards"></div>
+    <div class="cards" id="srvCards"></div>
+  </section>
+
+  <!-- 4. Is the application still meeting its deadline? -->
+  <section class="panel">
+    <h3>Application experience <span class="q">Is it still meeting its deadline?</span></h3>
+    <div class="body">
+      <div class="kpis" id="kpis"></div>
+      <div class="thresh">Analysis threshold
+        <div class="seg" id="thSeg"><button data-t="100">100 ms</button><button data-t="150" class="on">150 ms</button><button data-t="200">200 ms</button></div>
+        <span class="hint">changes the analysis only, never the controller</span>
+      </div>
+      <div class="buffer" id="bufferBox" style="display:none">
+        <div class="kpi" style="cursor:default"><div class="l">Playback buffer (upcoming content held)</div>
+          <div class="n" id="bufN">0.0<small>s</small></div>
+          <div class="bufbar"><i id="bufBar"></i></div>
+          <div class="s" id="bufS"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel full">
+    <h3>Response time <span class="q">every result, with the deadline and every server change</span></h3>
+    <div class="chartwrap"><canvas id="chart"></canvas><div class="tip" id="tip"></div></div>
+    <div class="chartlegend">
+      <span><i class="dot" style="background:var(--series)"></i>result on time</span>
+      <span><i class="dot" style="background:var(--warn)"></i>late result</span>
+      <span><i class="vl" style="border-color:var(--crit)"></i>lost result (short tick at top)</span>
+      <span><i class="vl" style="border-color:var(--text);border-left-style:dashed"></i><span id="dlLegend">150 ms deadline</span></span>
+      <span><i class="vl" style="border-color:var(--accent)"></i>server changed</span>
+      <span><i class="vl" style="border-color:var(--net-wifi)"></i>network changed, same server</span>
+      <span><i class="vl" style="border-color:var(--crit);border-left-style:dashed"></i>handover refused / connection lost</span>
+      <span><i class="vl" style="border-color:var(--warn);border-left-style:dotted"></i>test event</span>
+      <span class="muted">points above the chart top are drawn as ▲</span>
+    </div>
+  </section>
+
+  <!-- 3. What is ECHO deciding? -->
+  <section class="panel">
+    <h3>Current decision <span class="q">What is the controller deciding?</span></h3>
+    <div class="body">
+      <div class="action"><span class="act hold" id="actBadge">—</span><span id="actTarget" class="muted"></span></div>
+      <div class="reason" id="actReason">No mission loaded yet.</div>
+      <div class="explain" id="explain">Start a live run or replay a recorded mission.</div>
+      <details><summary>Technical detail: candidate scores</summary>
+        <div class="tablewrap"><table id="candTable"></table></div>
+        <div class="hint" id="candNote" style="margin-top:6px"></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>Handover progress <span class="q">old server serves until the new one is checked</span></h3>
+    <div class="body">
+      <div class="steps" id="steps"></div>
+      <div class="hstate" id="hstate">No handover in progress.</div>
+      <div class="testevent" id="testEvent"></div>
+      <details><summary>Technical names</summary>
+        <div class="hint">Prepare = ECHO_PREPARE (target allocates; model already resident) · Transfer = ECHO_STATE → ECHO_READY ·
+          Check = ECHO_VERIFY (target processes one duplicate request) · Switch = ECHO_COMMIT → ACK, standby promoted ·
+          Finish old work = ECHO_DRAIN (old server finishes requests already sent, takes no new ones).</div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>Session continuity <span class="q">did progress survive the server change?</span></h3>
+    <div class="body">
+      <dl class="kv" id="contKv"></dl>
+      <div class="verdict" id="verdict"><div class="h">No server change yet</div><div class="p">A check runs before every switch and again on the first result from the new server.</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>Decision timeline <span class="q">robot moved vs controller acted</span></h3>
+    <div class="body"><div class="log" id="log"></div></div>
+  </section>
+
+  <!-- 5. How does this compare with the alternatives? -->
+  <section class="panel full">
+    <h3>Comparison results <span class="q">same scenario, workload and seed for every controller · click any number for its evidence</span></h3>
+    <div class="body">
+      <div class="controls" style="padding:0 0 8px">
+        <div class="field"><label for="selComparison">Comparison</label><select id="selComparison" style="max-width:640px"></select></div>
+      </div>
+      <div class="tablewrap"><table id="cmpTable"></table></div>
+      <p class="comparison-caveat">Laboratory baselines, not measurements of UAE deployments. TCP models loss as extra delay; QUIC experiences packet loss. Treat loss-heavy transport comparisons as approximate.</p>
+      <div class="hint" id="cmpNote" style="margin-top:6px"></div>
+      <div class="prov" id="prov"></div>
+    </div>
+  </section>
+
+  <section class="panel full">
+    <h3>Evidence <span class="q">every run, with its manifest and files</span></h3>
+    <div class="body"><div class="tablewrap"><table id="runsTable"></table></div></div>
+  </section>
+
+  <section class="panel full">
+    <h3>Implementation status <span class="q">what is real, emulated, simulated, separate or only proposed</span></h3>
+    <div class="body">
+      <div class="statuslist" id="statusList"></div>
+      <h4 style="margin:16px 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Additional experiments (supporting work, not part of this mission)</h4>
+      <div class="statuslist" id="extraList"></div>
+    </div>
+  </section>
+</div>
+</div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ------------------------------------------------------------------ config
-const NETS = {
-  wifi:      {label:'Indoor Wi-Fi', colour:'#ffffff', hex:0xffffff},
-  cellular:  {label:'Private 5G',   colour:'#ff6b00', hex:0xff6b00},
-  satellite: {label:'Satellite',    colour:'#ffb27a', hex:0xffb27a},
-  wired:     {label:'Wired dock',   colour:'#8e8e96', hex:0x8e8e96},
-};
-const NET_ORDER = ['wifi','cellular','satellite','wired'];
-const EDGES = {
-  A:{label:'Indoor lab',  net:'wifi',      pos:0.10},
-  B:{label:'Yard 5G',     net:'cellular',  pos:0.40},
-  C:{label:'Remote site', net:'satellite', pos:0.70},
-  D:{label:'Dock',        net:'wired',     pos:0.95},
-};
-const EDGE_ORDER = ['A','B','C','D'];
-const STEPS = ['STABLE','PREPARING','TRANSFERRING','VERIFYING','COMMITTING','DRAINING'];
-const AGENTS = [
-  ['watcher','Watcher','what does every network and edge look like right now?'],
-  ['predictor','Predictor','where is each one heading?'],
-  ['intent','Intent','what is the user actually doing?'],
-  ['decision','Decision','which network + edge pair costs least?'],
-  ['orchestrator','Orchestrator','act on that now, or hold - and how cheaply?'],
-  ['handoff','Handoff','move the session early, and reversibly'],
-  ['recovery','Recovery','the handoff failed - now what?'],
-  ['troubleshooter','Troubleshooter','it feels bad and nothing switched. why?'],
-  ['explainer','Explainer','say it in one sentence'],
+"use strict";
+// ---------------------------------------------------------------------------
+// Everything shown here is read from engine events (live WebSocket or a
+// recorded events.jsonl). Headline numbers come from `metrics_updated` /
+// `mission_completed` summaries computed by echo_sim.metrics - the page never
+// computes its own version of a metric.
+// ---------------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const NETS = ["wifi", "cellular", "satellite", "wired"];
+const NET_SHORT = {wifi: "Wi-Fi", cellular: "5G", satellite: "Backup (sat-like)", wired: "Wired"};
+const SRVS = ["A", "B", "C", "D"];
+const CARD_NET = {wifi: "Indoor Wi-Fi", cellular: "Private 5G", satellite: "Backup path", wired: "Wired dock"};
+const STEPS = [
+  ["prepare", "Prepare", "target reserves room for the session"],
+  ["transfer", "Transfer", "session progress is copied"],
+  ["check", "Check", "target proves it works"],
+  ["switch", "Switch", "target takes over requests"],
+  ["finish_old_work", "Finish old work", "old server completes what it had"],
 ];
-const ROUTE_HALF = 22;
-const xOf = p => -ROUTE_HALF + p * ROUTE_HALF * 2;
+const ACTIONS = {hold: ["Hold", "hold"], handoff: ["Switch server", "move"],
+  migrate_path: ["Move connection", "move"], reconnect: ["Reconnect", "recon"]};
 
-// ------------------------------------------------------------------ 3D scene
-const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+let META = {caps: null, scen: null};
+let V;                 // view state for the mission being shown
+let threshold = 150;
+let source = null;     // "live" | "replay" | null
+let liveRunId = null;
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0b0d);
-scene.fog = new THREE.FogExp2(0x0b0b0d, 0.012);
+function freshView() {
+  return {
+    runId: null, mode: null, scenario: null, profile: null, origin: null, duration: 90,
+    obs: null, candidates: [], current: null, decision: null, explanation: "",
+    handoff: {phase: "idle", target: null, times: {}, failed: null, reason: ""},
+    lastPhaseT: null, cont: {session: null, version: null, lastReq: null, bytes: null, check: null, server: null},
+    points: [], lost: [], markers: [], summary: null, playback: null, log: [], t: 0,
+    faultNote: null,
+    agentEvents: {},
+  };
+}
+V = freshView();
 
-const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 400);
-scene.add(new THREE.AmbientLight(0xffffff, 0.42));
-const key = new THREE.DirectionalLight(0xffffff, 0.7);  key.position.set(-9, 17, 10); scene.add(key);
-const rim = new THREE.DirectionalLight(0xff6b00, 0.55); rim.position.set(12, 7, -14); scene.add(rim);
+// ------------------------------------------------------------------ helpers
+function fmt(x, d = 0) { return (x === null || x === undefined || Number.isNaN(x)) ? "—" : Number(x).toFixed(d); }
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
+function netColor(n) { return `var(--net-${n})`; }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = "none", 3500); }
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(typeof m === "string" ? m : JSON.stringify(m)); }
+  return r;
+}
+function modeLabel(m) { const x = META.caps?.controller_modes.find(c => c.id === m); return x ? x.label : m; }
+function scenById(id) { return META.scen?.scenarios.find(s => s.id === id); }
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 120),
-  new THREE.MeshStandardMaterial({color:0x141417, roughness:.95, metalness:.05}));
-ground.rotation.x = -Math.PI/2; ground.position.y = -0.02; scene.add(ground);
-const grid = new THREE.GridHelper(200, 100, 0x3a3a42, 0x212126);
-grid.material.transparent = true; grid.material.opacity = .5; scene.add(grid);
-
-scene.add(new THREE.Line(
-  new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-ROUTE_HALF-4, .02, 0), new THREE.Vector3(ROUTE_HALF+4, .02, 0)]),
-  new THREE.LineBasicMaterial({color:0xff6b00, transparent:true, opacity:.45})));
-
-const bands = {};
-NET_ORDER.forEach((nid, i) => {
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ROUTE_HALF*2+8, 2.4),
-    new THREE.MeshBasicMaterial({color:NETS[nid].hex, transparent:true, opacity:.05,
-      side:THREE.DoubleSide}));
-  mesh.rotation.x = -Math.PI/2;
-  mesh.position.set(0, .01, -3.2 - i*2.6);
-  scene.add(mesh); bands[nid] = mesh;
-});
-
-function label(text, colour, size, w){
-  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
-  const x = c.getContext('2d');
-  x.font = '700 ' + size + 'px Inter,sans-serif';
-  x.fillStyle = colour; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.shadowColor = 'rgba(0,0,0,.9)'; x.shadowBlur = 10;
-  x.fillText(text, 256, 64);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:new THREE.CanvasTexture(c), transparent:true, depthTest:false}));
-  s.scale.set(w, w/4, 1);
-  return s;
+function setBadge() {
+  const b = $("modeBadge");
+  b.className = "badge";
+  if (source === "live") { b.classList.add("live"); b.textContent = "Live emulation"; }
+  else if (source === "replay" && V.origin === "imported") { b.classList.add("imported"); b.textContent = "Imported recording"; }
+  else if (source === "replay") { b.classList.add("replay"); b.textContent = "Recorded replay"; }
+  else b.textContent = "Idle";
 }
 
-const towers = {};
-EDGE_ORDER.forEach(eid => {
-  const spec = EDGES[eid];
-  const g = new THREE.Group();
-  g.position.set(xOf(spec.pos), 0, -14);
+// ------------------------------------------------------------------ event reducer
+function logLine(t, icon, cls, text) {
+  V.log.push({t, icon, cls, text});
+  if (V.log.length > 400) V.log.shift();
+}
 
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, .35, 6),
-    new THREE.MeshStandardMaterial({color:0x1b1b1f, roughness:.7, metalness:.35}));
-  base.position.y = .17; g.add(base);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.4, 1.5),
-    new THREE.MeshStandardMaterial({color:0x232328, roughness:.5, metalness:.5,
-      emissive:0xff6b00, emissiveIntensity:.05}));
-  body.position.y = 2.05; g.add(body);
-
-  const units = [];
-  for (let i=0;i<5;i++){
-    const u = new THREE.Mesh(new THREE.BoxGeometry(1.62, .16, 1.62),
-      new THREE.MeshStandardMaterial({color:0x2c2c32, emissive:NETS[spec.net].hex,
-        emissiveIntensity:.1, transparent:true, opacity:.55}));
-    u.position.y = .85 + i*.62; g.add(u); units.push(u);
+function apply(e) {
+  const p = e.payload || {}, t = e.elapsed_time ?? V.t;
+  V.t = Math.max(V.t, t);
+  V.agentEvents[e.event_type] = {payload:p, time:t, source:e.source_component};
+  switch (e.event_type) {
+    case "mission_started":
+      V.mode = p.controller_mode; V.scenario = p.scenario_id; V.profile = p.application_profile;
+      V.duration = p.duration_s; V.runId = e.run_id;
+      if (source === "live") syncSelectors(p.scenario_id, p.controller_mode, p.application_profile);
+      logLine(t, "▶", "", `Mission started · ${modeLabel(p.controller_mode)}`);
+      break;
+    case "session_started":
+      V.cont.session = p.session_id || V.cont.session; V.cont.server = p.server;
+      logLine(t, "●", "srv", `Session opened on Server ${p.server} over ${NET_SHORT[p.network] || p.network}`);
+      break;
+    case "network_observed":
+      V.obs = p;
+      if (p.server_state_version != null) V.cont.version = p.server_state_version;
+      break;
+    case "zone_changed":
+      logLine(t, "↦", "zone", `Robot moved into ${p.to_zone}`);
+      break;
+    case "candidate_scored":
+      V.candidates = p.candidates || []; V.current = p.current;
+      break;
+    case "decision_made":
+      V.decision = p;
+      break;
+    case "explanation":
+      V.explanation = p.text;
+      break;
+    case "handoff_phase_changed":
+      if (p.phase === "selected") {
+        V.handoff = {phase: "selected", target: p.target_server, network: p.target_network,
+                     source: p.source_server, times: {}, failed: null, reason: p.reason || ""};
+        V.lastPhaseT = t;
+        logLine(t, "◇", "srv", `Controller selected Server ${p.target_server} over ${NET_SHORT[p.target_network] || p.target_network}; preparing it`);
+      } else if (p.phase === "idle") {
+        V.handoff.phase = V.handoff.failed ? "failed" : (V.handoff.target ? "complete" : "idle");
+      } else if (p.phase === "recovering") {
+        V.handoff.failed = p.failed_phase || V.handoff.phase; V.handoff.reason = p.reason || "";
+      } else {
+        if (V.lastPhaseT != null && V.handoff.phase && V.handoff.phase !== "selected")
+          V.handoff.times[V.handoff.phase] = (t - V.lastPhaseT) * 1000;
+        V.handoff.phase = p.phase; V.lastPhaseT = t;
+      }
+      break;
+    case "handoff_completed":
+      V.handoff.phase = "complete"; V.handoff.failed = null;
+      V.handoff.times = {prepare: p.prepare_ms, transfer: p.state_ms, check: p.verify_ms, switch: p.commit_ms};
+      V.handoff.total = p.total_ms; V.handoff.target = p.target_server; V.handoff.source = p.source_server;
+      V.cont.bytes = p.state_bytes; V.cont.server = p.target_server;
+      V.markers.push({t, kind: "server", label: `Server ${p.source_server} → ${p.target_server}`});
+      logLine(t, "⇄", "srv", `Server changed ${p.source_server} → ${p.target_server} in ${fmt(p.total_ms)} ms; no session restart`);
+      break;
+    case "handoff_failed":
+      V.handoff.phase = "failed"; V.handoff.failed = p.failed_phase || "prepare"; V.handoff.reason = p.reason;
+      V.markers.push({t, kind: "failed", label: `Handover to ${p.target_server} refused`});
+      logLine(t, "✕", "fail", `Handover to Server ${p.target_server} failed at ${p.failed_phase || "?"}: ${p.reason}. Old server kept serving.`);
+      break;
+    case "recovery_planned":
+      logLine(t, "↺", "", `Recovery: ${p.reason}`);
+      break;
+    case "fault_injected":
+      V.faultNote = `${p.label || "Test event"} — Server ${p.server} was told to refuse preparation.`;
+      V.markers.push({t, kind: "test", label: p.label});
+      logLine(t, "⚑", "test", `${p.label} (Server ${p.server})`);
+      break;
+    case "path_migrated":
+      V.markers.push({t, kind: "path", label: `${NET_SHORT[p.from_network]} → ${NET_SHORT[p.to_network]}`});
+      logLine(t, "⤳", "", `Connection moved ${NET_SHORT[p.from_network] || p.from_network} → ${NET_SHORT[p.to_network] || p.to_network}; still Server ${p.server}`);
+      break;
+    case "connection_lost":
+      V.markers.push({t, kind: "failed", label: "connection lost"});
+      logLine(t, "✕", "fail", `Connection to Server ${p.server} lost`);
+      break;
+    case "reconnected":
+      V.markers.push({t, kind: "server", label: `reconnect → ${p.server}`});
+      V.cont.server = p.server;
+      logLine(t, "↻", "srv", `Reconnected to Server ${p.server} after ${fmt(p.outage_ms)} ms; session rebuilt from nothing`);
+      break;
+    case "state_verified":
+      V.cont.check = p; if (p.session_id) V.cont.session = p.session_id;
+      if (p.payload_bytes) V.cont.bytes = p.payload_bytes;
+      logLine(t, p.ok ? "✓" : "✕", p.ok ? "" : "fail",
+        `${p.stage === "before_switch" ? "Pre-switch check" : p.stage === "after_reconnect" ? "Post-reconnect check" : "Post-switch check"} on Server ${p.server}: ${p.ok ? "passed" : "FAILED"}`);
+      break;
+    case "request_completed":
+      V.points.push({t, ms: p.response_ms, srv: p.server, net: p.network, n: p.request_no});
+      V.cont.lastReq = p.request_no; if (p.session_id) V.cont.session = p.session_id;
+      if (p.state_version != null && p.server === (V.obs?.current_server ?? p.server)) V.cont.version = p.state_version;
+      break;
+    case "request_lost":
+      V.lost.push({t, n: p.request_no, reason: p.reason});
+      break;
+    case "metrics_updated":
+      V.summary = p.summary; break;
+    case "mission_completed":
+      V.summary = p.summary;
+      logLine(t, "■", "", "Mission completed");
+      break;
+    case "playback_buffer":
+      V.playback = p; break;
+    case "run_error":
+      logLine(t, "✕", "fail", `Run error: ${p.reason}`); break;
   }
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(2.1, .05, 8, 48),
-    new THREE.MeshBasicMaterial({color:0xff6b00, transparent:true, opacity:.16}));
-  halo.rotation.x = -Math.PI/2; halo.position.y = .05; g.add(halo);
-
-  const lbl = label('EDGE ' + eid, '#ffffff', 62, 5.6); lbl.position.set(0, 5.1, 0); g.add(lbl);
-  const sub = label(spec.label, '#8a8a93', 34, 4.8);    sub.position.set(0, 4.4, 0); g.add(sub);
-
-  scene.add(g);
-  towers[eid] = {group:g, body, units, halo, top:new THREE.Vector3(xOf(spec.pos), 3.9, -14)};
-});
-
-[['ZONE A',0.08],['ZONE B',0.40],['ZONE C',0.70],['ZONE D',0.95]].forEach(z => {
-  const s = label(z[0], '#5c5c65', 38, 4.2); s.position.set(xOf(z[1]), .95, 5.0); scene.add(s);
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,1.5,6),
-    new THREE.MeshBasicMaterial({color:0x3a3a42}));
-  post.position.set(xOf(z[1]), .75, 5.0); scene.add(post);
-});
-
-// ---- the EDGE inspection robot -------------------------------------------
-// A quadruped: yellow shell over a black chassis, four Z-folded legs, and the
-// sensor payload on its back. The payload mast is where the radio lives, so it
-// is also where the link beam starts.
-const matYellow = new THREE.MeshStandardMaterial({color:0xf2c200, roughness:.42, metalness:.28});
-const matDark   = new THREE.MeshStandardMaterial({color:0x141416, roughness:.55, metalness:.5});
-const matMid    = new THREE.MeshStandardMaterial({color:0x2a2a2e, roughness:.6, metalness:.42});
-const ledMat    = new THREE.MeshStandardMaterial({color:0x2a2a2e, emissive:0xff6b00,
-                                                  emissiveIntensity:1.2});
-
-const walker = new THREE.Group();
-const robot = new THREE.Group();
-robot.scale.setScalar(1.55);
-walker.add(robot);
-
-// chassis + shell
-const bodyCore = new THREE.Mesh(new THREE.BoxGeometry(1.70,.30,.66), matDark);
-bodyCore.position.y = 1.02; robot.add(bodyCore);
-const shellTop = new THREE.Mesh(new THREE.BoxGeometry(1.54,.20,.72), matYellow);
-shellTop.position.y = 1.16; robot.add(shellTop);
-[.76, -.76].forEach(x => {
-  const shroud = new THREE.Mesh(new THREE.BoxGeometry(.32,.44,.80), matYellow);
-  shroud.position.set(x, 1.02, 0); robot.add(shroud);
-});
-
-// front sensor head
-const nose = new THREE.Mesh(new THREE.BoxGeometry(.32,.32,.62), matYellow);
-nose.position.set(.96, 1.05, 0); nose.rotation.z = -0.13; robot.add(nose);
-const face = new THREE.Mesh(new THREE.BoxGeometry(.07,.22,.52), matDark);
-face.position.set(1.13, 1.02, 0); robot.add(face);
-[.15, -.15].forEach(z => {
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.03,10), matMid);
-  lens.rotation.z = Math.PI/2; lens.position.set(1.17, 1.03, z); robot.add(lens);
-});
-
-// EDGE badge on both flanks
-function sticker(text){
-  const c = document.createElement('canvas'); c.width = 256; c.height = 112;
-  const x = c.getContext('2d');
-  x.fillStyle = '#ffffff'; x.fillRect(0,0,256,112);
-  x.fillStyle = '#ff6b00'; x.font = '700 58px Inter,sans-serif';
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText(text, 128, 60);
-  return new THREE.CanvasTexture(c);
 }
-const badgeTex = sticker('EDGE');
-[[.336, 0], [-.336, Math.PI]].forEach(b => {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(.40,.18),
-    new THREE.MeshBasicMaterial({map:badgeTex}));
-  m.position.set(-.10, 1.04, b[0]); m.rotation.y = b[1]; robot.add(m);
-});
 
-// status LEDs - these track how healthy the link feels
-[.34, -.34].forEach(z => {
-  const led = new THREE.Mesh(new THREE.BoxGeometry(.05,.13,.03), ledMat);
-  led.position.set(.82, 1.14, z); robot.add(led);
-});
+// ------------------------------------------------------------------ rendering
+let dirty = true;
+function markDirty() { dirty = true; }
+function frame() { if (dirty) { dirty = false; renderAll(); } requestAnimationFrame(frame); }
 
-// sensor payload on the back, and the radio that the beam leaves from
-const mast = new THREE.Group(); mast.position.set(.10, 1.26, 0);
-const post = new THREE.Mesh(new THREE.BoxGeometry(.20,.30,.22), matDark);
-post.position.y = .15; mast.add(post);
-const sensor = new THREE.Mesh(new THREE.CylinderGeometry(.10,.10,.18,12), matMid);
-sensor.position.y = .40; mast.add(sensor);
-[0, Math.PI/2].forEach(r => {
-  const cage = new THREE.Mesh(new THREE.TorusGeometry(.17,.026,8,22), matDark);
-  cage.position.y = .42; cage.rotation.y = r; mast.add(cage);
-});
-const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.34,6), matDark);
-antenna.position.set(-.58, 1.42, .26); robot.add(antenna);
-robot.add(mast);
-const glow = new THREE.PointLight(0xff6b00, 1.4, 7);
-glow.position.set(.10, 1.72, 0); robot.add(glow);
-
-// four legs, folded the way a quadruped stands
-const legs = [];
-function makeLeg(x, z, phase){
-  const hip = new THREE.Group();
-  hip.position.set(x, 1.00, z);
-  const hipJoint = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.14,12), matDark);
-  hipJoint.rotation.x = Math.PI/2; hip.add(hipJoint);
-
-  const thigh = new THREE.Mesh(new THREE.BoxGeometry(.24,.48,.22), matYellow);
-  thigh.geometry.translate(0,-.24,0); hip.add(thigh);
-
-  const knee = new THREE.Group();
-  knee.position.y = -.48;
-  const kneeJoint = new THREE.Mesh(new THREE.CylinderGeometry(.085,.085,.14,10), matDark);
-  kneeJoint.rotation.x = Math.PI/2; knee.add(kneeJoint);
-  const shin = new THREE.Mesh(new THREE.BoxGeometry(.085,.52,.10), matDark);
-  shin.geometry.translate(0,-.26,0); knee.add(shin);
-  const foot = new THREE.Mesh(new THREE.SphereGeometry(.072,10,8), matDark);
-  foot.position.y = -.52; knee.add(foot);
-  hip.add(knee);
-
-  robot.add(hip);
-  const leg = {hip, knee, phase};
-  legs.push(leg);
-  return leg;
+function renderAll() {
+  setBadge();
+  renderScenarioNote(); renderMap(); renderCards(); renderKpis(); renderChart();
+  renderDecision(); renderSteps(); renderContinuity(); renderLog();
+  renderMissionHero(); renderAgents();
 }
-// trot gait: diagonal pairs move together
-makeLeg( .70,  .36, 0);
-makeLeg( .70, -.36, Math.PI);
-makeLeg(-.70,  .36, Math.PI);
-makeLeg(-.70, -.36, 0);
 
-walker.position.set(xOf(0), 0, 0);
-scene.add(walker);
-const nameTag = label('ROBOT-01', '#ffffff', 34, 3.6);
-nameTag.position.set(0, 3.3, 0); walker.add(nameTag);
-
-// ---- beams ---------------------------------------------------------------
-function makeBeam(colour, opacity){
-  const geo = new THREE.BufferGeometry().setFromPoints(
-    Array.from({length:24}, () => new THREE.Vector3()));
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
-    color:colour, transparent:true, opacity:opacity}));
-  line.frustumCulled = false; scene.add(line); return line;
+function renderAgents() {
+  const event = type => V.agentEvents[type];
+  const observed = event("network_observed"), scored = event("candidate_scored"), decision = event("decision_made");
+  const p = observed?.payload, ranking = scored?.payload.candidates || [], best = ranking[0];
+  const mode = V.mode || $("selMode").value;
+  const echo = mode === "measured" || mode === "predictive";
+  const ready = !!observed;
+  const report = (e, fallback="Waiting for a report") => e ? `Reported at ${fmt(e.time,1)} s` : fallback;
+  const handoffTypes = ["handoff_phase_changed","handoff_completed","handoff_failed"];
+  const handoff = handoffTypes.map(event).filter(Boolean).sort((a,b)=>b.time-a.time)[0];
+  const recovery=event("recovery_planned"), diagnosis=event("diagnosis"), explanation=event("explanation");
+  const rows = [
+    ["01", "Watcher", "Measures the networks and servers", "Reads signal, delay, loss and server load.",
+      p ? `${Object.values(p.networks).filter(n=>n.available).length} of 4 networks available. Server ${p.current_server} serves over ${NET_SHORT[p.current_network]||p.current_network}.` : "Waiting for network measurements.", report(observed)],
+    ["02", "Intent", "Sets the application's priorities", "Uses the chosen workload; traffic classification is only a hint.",
+      p ? `Policy: ${p.intent||"unknown"}. Traffic guess: ${p.observed_traffic||"unknown"}. ${V.profile==="buffered_playback"?"Buffered content can tolerate a short gap.":"Inspection results need a quick response."}` : "Waiting for the run's application profile.", report(observed)],
+    ["03", "Predictor", "Estimates what happens next", "Smooths measurements; predictive mode also projects their trend.",
+      !echo ? "Not used to choose handovers in this baseline." : scored ? (mode==="measured" ? "Current measurements only. Forecasting is off in this mode." : `Looks ${fmt(scored.payload.horizon_s,1)} seconds ahead when scoring options.`) : "Waiting for link history.", !echo?"Baseline bypass":report(scored)],
+    ["04", "Decision engine", "Ranks network + server pairs", "Balances delay, jitter, loss, processing time, load and proximity.",
+      best ? `Best ranked: Server ${best.edge_id} over ${NET_SHORT[best.network_id]||best.network_id}. Estimated response ${fmt(best.e2e_ms)} ms.${echo?" Ranking alone does not authorize a move.":" Reference ranking only in this baseline."}` : "Waiting for candidate scores.", report(scored)],
+    ["05", "Orchestrator", "Approves or holds the move", "Checks stability, cooldown, previous failures and playback buffer.",
+      !echo ? "This baseline follows its own reconnect or path-change policy." : decision ? decision.payload.reason : "Waiting for a decision.", !echo?"Baseline bypass":report(decision)],
+    ["06", "Handoff manager", "Moves the session safely", "Prepare → copy state → verify → switch → finish old work.",
+      !echo ? "Session migration is not enabled for this baseline." : handoff ? (V.handoff.phase==="failed"?`Transfer refused: ${V.handoff.reason}`:`Latest phase: ${V.handoff.phase}. ${V.handoff.target?"Target: Server "+V.handoff.target+".":""}`) : "Standing by. No session transfer has been reported.", !echo?"Baseline bypass":report(handoff,"No handover event")],
+    ["07", "Recovery", "Handles a failed handover", "Keeps serving and avoids retrying a failed target immediately.",
+      recovery ? recovery.payload.reason : "Standing by. No recovery plan has been reported.", report(recovery,"No recovery event")],
+    ["08", "Troubleshooter", "Explains degraded performance", "Checks why the current path or server is performing poorly.",
+      diagnosis ? `${diagnosis.payload.headline} (${diagnosis.payload.cause})` : "No diagnosis has been reported.", report(diagnosis,"No diagnosis event")],
+    ["09", "Explainer", "Turns the decision into plain language", "Uses the controller's own measurements; no language model.",
+      explanation ? explanation.payload.text : "Waiting for an explanation.", report(explanation)],
+  ];
+  $("agentsMode").textContent = `${modeLabel(mode)} · ${source==="replay"?"recorded evidence":source==="live"?"live experiment":"not running"}`;
+  $("agentRows").innerHTML = rows.map(([n,name,job,how,result,status])=>`<div class="agent-row"><div class="agent-name"><span>${n}</span><div><h3>${esc(name)}</h3><strong>${esc(job)}</strong><p>${esc(how)}</p></div></div><p class="agent-output">${esc(result)}</p><span class="agent-evidence">${esc(status)}</span></div>`).join("");
 }
-const activeBeam  = makeBeam(0xff6b00, .95);
-const prepareBeam = makeBeam(0xffffff, .0);
 
-function curveTo(line, from, to, lift){
-  const pts = [];
-  for (let i=0;i<24;i++){
-    const t = i/23;
-    const p = new THREE.Vector3().lerpVectors(from, to, t);
-    p.y += Math.sin(Math.PI*t) * lift;
-    pts.push(p);
+function renderMissionHero() {
+  const obs = V.obs, last = V.points.at(-1), lost = V.lost.at(-1);
+  $("heroNetwork").textContent = obs ? (NET_SHORT[obs.current_network] || obs.current_network) : "Awaiting data";
+  $("heroServer").textContent = obs?.current_server ? "Server " + obs.current_server : "—";
+  $("heroProgress").textContent = obs ? Math.round(obs.mission_fraction * 100) + "%" : "—";
+  $("robotLocation").textContent = obs?.zone || "READY AT START";
+  $("robotRunState").textContent = source === "live" ? "LIVE EMULATION" : source === "replay" ? "RECORDED REPLAY" : "AWAITING MISSION";
+  const el = $("heroExperience"); el.className = "";
+  if (!obs) el.textContent = "Start or replay a mission";
+  else if (V.profile === "buffered_playback") { el.textContent = V.playback?.stalled ? "Playback stalled" : "Simulated playback buffer"; }
+  else if (!last || (lost && lost.t > last.t) || V.t - last.t > 2.5) { el.textContent = "Waiting for usable results"; el.className = "mission-warn"; }
+  else if (last.ms > threshold) { el.textContent = "Connected · deadline unmet"; el.className = "mission-warn"; }
+  else { el.textContent = "Latest result on time"; el.className = "mission-good"; }
+  $("siteZone").textContent = obs?.zone || "Robot ready at start";
+  $("siteObserve").textContent = obs ? "Four paths · Server " + obs.current_server + " serving" : "Waiting for measurements";
+  $("siteAction").textContent = V.decision?.action ? ({hold:"Keep current connection",handoff:"Move the session",migrate_path:"Change network path"}[V.decision.action] || V.decision.action) : "No mission loaded";
+  $("siteReason").textContent = V.decision?.reason || "Choose a scenario and run or replay a mission.";
+  $("siteHandoff").textContent = ({idle:"Session stable",selected:"Preparing the next server",prepare:"Preparing the next server",transfer:"Copying session state",check:"Checking the target",switch:"Switching server",complete:"Transfer completed",failed:"Target refused · keep serving"}[V.handoff?.phase] || V.handoff?.phase || "No transfer in progress");
+  $("siteNetworks").innerHTML = NETS.map(n=>{const p=obs?.networks?.[n], active=obs?.current_network===n;return `<div class="site-network ${active?'active':''} ${p?.available===false?'unavailable':''}"><div><b>${esc(CARD_NET[n])}</b><small>${active?'IN USE':p?.available===false?'NO COVERAGE':'WATCHING'}</small></div><div class="quality-track"><i style="width:${p?Math.round(p.quality*100):0}%;background:${netColor(n)}"></i></div><p>${p ? `${Math.round(p.quality*100)}% signal · ${p.available?fmt(p.rtt_ms)+' ms':'unavailable'}`:'Awaiting telemetry'}</p><span>${p?.available?'Jitter '+fmt(p.jitter_ms,1)+' ms · loss '+fmt(p.loss*100,2)+'%':''}</span></div>`;}).join('');
+  window.dispatchEvent(new CustomEvent("echo-mission-view", {detail: {obs, handoff: V.handoff, time: V.t, source, playing: source === "live" || (source === "replay" && R?.playing)}}));
+}
+
+function renderScenarioNote() {
+  const s = scenById(V.scenario || $("selScenario").value);
+  if (!s) return;
+  const prof = META.caps?.application_profiles.find(p => p.id === (V.profile || $("selProfile").value));
+  $("scenarioNote").innerHTML = `<b>${esc(s.title)}.</b> ${esc(s.summary)} <span class="muted">Tests: ${esc(s.tests)}</span>` +
+    (V.mode ? ` · <b>${esc(modeLabel(V.mode))}</b>` : "") + (prof ? ` · ${esc(prof.label)}` : "") +
+    (V.runId ? ` · <span class="muted" style="font-family:var(--mono);font-size:12px">${esc(V.runId)}</span>` : "");
+}
+
+function interp(keys, x) {
+  if (x <= keys[0][0]) return keys[0][1];
+  if (x >= keys[keys.length - 1][0]) return keys[keys.length - 1][1];
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [x0, y0] = keys[i], [x1, y1] = keys[i + 1];
+    if (x >= x0 && x <= x1) { let u = x1 === x0 ? 1 : (x - x0) / (x1 - x0); u = u * u * (3 - 2 * u); return y0 + (y1 - y0) * u; }
   }
-  line.geometry.setFromPoints(pts);
-  return pts;
+  return keys[keys.length - 1][1];
 }
 
-const packets = [];
-for (let i=0;i<14;i++){
-  const m = new THREE.Mesh(new THREE.SphereGeometry(.1, 8, 8),
-    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.9}));
-  m.visible = false; scene.add(m); packets.push({mesh:m, t:i/14});
+function renderMap() {
+  const W = META.scen?.world; if (!W) return;
+  const svg = $("map");
+  const X = (p) => 110 + p * 870;
+  const laneY = {wifi: 150, cellular: 172, satellite: 194, wired: 216};
+  const srvY = 44, routeY = 258;
+  const s = scenById(V.scenario || $("selScenario").value);
+  const route = s ? s.route : [0, 1];
+  const obs = V.obs;
+  const pos = obs ? obs.position : route[0];
+  let h = "";
+  // zones
+  const zones = W.zones;
+  zones.forEach(([z, name], i) => {
+    const x0 = X(z), x1 = X(i + 1 < zones.length ? zones[i + 1][0] : 1);
+    h += `<rect x="${x0}" y="126" width="${x1 - x0}" height="146" fill="${i % 2 ? "#18181c" : "#141417"}"/>`;
+    h += `<text x="${x0 + 4}" y="284" fill="var(--dim)" font-size="11">${esc(name.replace("Zone ", ""))}</text>`;
+  });
+  // coverage lanes (configured coverage, sampled)
+  NETS.forEach(n => {
+    const k = W.networks[n].coverage, y = laneY[n];
+    const avail = obs ? obs.networks?.[n]?.available : true;
+    let d = "";
+    for (let i = 0; i <= 100; i++) { const p = i / 100, q = interp(k, p); d += `${i ? "L" : "M"}${X(p).toFixed(1)},${(y + 8 - q * 16).toFixed(1)} `; }
+    for (let i = 100; i >= 0; i--) { const p = i / 100, q = interp(k, p); d += `L${X(p).toFixed(1)},${(y + 8 + q * 0).toFixed(1)} `; }
+    h += `<path d="${d}Z" fill="${netColor(n)}" opacity="${avail === false ? 0.12 : 0.38}"/>`;
+    h += `<text x="102" y="${y + 6}" fill="${avail === false ? "var(--dim)" : "var(--muted)"}" font-size="11" text-anchor="end">${NET_SHORT[n]}</text>`;
+  });
+  // route and robot
+  h += `<line x1="${X(0)}" y1="${routeY}" x2="${X(1)}" y2="${routeY}" stroke="var(--line2)" stroke-width="2"/>`;
+  h += `<line x1="${X(route[0])}" y1="${routeY}" x2="${X(route[1])}" y2="${routeY}" stroke="var(--text)" stroke-width="3"/>`;
+  h += `<text x="${X(route[0])}" y="${routeY - 8}" fill="var(--muted)" font-size="10">mission route</text>`;
+  // servers
+  SRVS.forEach(id => {
+    const sv = W.servers[id], x = X(sv.site_position);
+    const serving = obs?.current_server === id;
+    const cand = obs?.candidate?.server === id || (V.handoff.target === id && ["selected", "prepare", "transfer", "check", "switch"].includes(V.handoff.phase));
+    h += `<rect x="${x - 40}" y="${srvY - 18}" width="80" height="34" rx="6" fill="${serving ? "var(--text)" : "var(--panel2)"}" stroke="${cand ? "var(--accent)" : "var(--line2)"}" stroke-width="${cand ? 2 : 1}" ${cand ? 'stroke-dasharray="5 3"' : ""}/>`;
+    h += `<text x="${x}" y="${srvY + 4}" fill="${serving ? "#111" : "var(--text)"}" font-size="14" font-weight="700" text-anchor="middle">Server ${id}</text>`;
+    h += `<line x1="${x}" y1="${srvY + 16}" x2="${x}" y2="126" stroke="var(--line)" stroke-dasharray="2 4"/>`;
+  });
+  // links
+  const rx = X(pos), ry = routeY - 14;
+  if (obs && obs.current_server) {
+    const sx = X(W.servers[obs.current_server].site_position);
+    const cn = obs.current_network;
+    const up = obs.networks?.[cn]?.available !== false;
+    const recent = V.markers.length && V.markers[V.markers.length - 1].kind === "server" && V.t - V.markers[V.markers.length - 1].t < 1.2;
+    h += `<path d="M${rx},${ry} C${rx},${ry - 90} ${sx},${srvY + 110} ${sx},${srvY + 17}" fill="none" stroke="${up ? netColor(cn) : "var(--dim)"}" stroke-width="${recent ? 6 : 3}" opacity="${up ? 1 : .6}"/>`;
+    const cand = obs.candidate || (["selected", "prepare", "transfer", "check", "switch"].includes(V.handoff.phase) ? {server: V.handoff.target, network: V.handoff.network} : null);
+    if (cand && cand.server && W.servers[cand.server]) {
+      const cx = X(W.servers[cand.server].site_position);
+      h += `<path d="M${rx},${ry} C${rx},${ry - 70} ${cx},${srvY + 120} ${cx},${srvY + 17}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="7 5"/>`;
+    }
+  }
+  h += `<g transform="translate(${rx},${routeY-8})" fill="var(--accent)" stroke="#08101b" stroke-width="2"><rect x="-18" y="-10" width="32" height="14" rx="4"/><rect x="12" y="-13" width="13" height="10" rx="3"/><path d="M-12,3 l-4,11 M-3,3 l4,11 M9,3 l-3,11 M14,3 l6,11" stroke="var(--accent)" stroke-width="4"/></g>`;
+  svg.innerHTML = h;
+  $("zoneNow").innerHTML = obs ? `Robot: <b style="color:var(--text)">${esc(obs.zone || "")}</b> · on <b style="color:var(--text)">Server ${esc(obs.current_server)}</b> over ${esc(NET_SHORT[obs.current_network] || obs.current_network)}` : "";
 }
 
-// ---- camera --------------------------------------------------------------
-let follow = true, yaw = -0.30, pitch = 0.28, dist = 14.5;
-let dragging = false, lastX = 0, lastY = 0;
-canvas.addEventListener('pointerdown', e => {dragging = true; lastX = e.clientX; lastY = e.clientY;});
-addEventListener('pointerup', () => dragging = false);
-addEventListener('pointermove', e => {
-  if(!dragging) return;
-  yaw -= (e.clientX - lastX) * .006;
-  pitch = Math.max(.05, Math.min(1.15, pitch + (e.clientY - lastY) * .004));
-  lastX = e.clientX; lastY = e.clientY;
-});
-canvas.addEventListener('wheel', e => {
-  e.preventDefault(); dist = Math.max(6, Math.min(60, dist + e.deltaY * .016));
-}, {passive:false});
-addEventListener('keydown', e => { if(e.key === 'f' || e.key === 'F') follow = !follow; });
-addEventListener('resize', () => {
-  renderer.setSize(innerWidth, innerHeight);
-  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
-  drawSpark();
-});
+function renderCards() {
+  const W = META.scen?.world; if (!W) return;
+  const obs = V.obs;
+  const dist = (obs?.disturbances || []);
+  $("netCards").innerHTML = NETS.map(n => {
+    const x = obs?.networks?.[n];
+    const up = x ? x.available : null;
+    const inuse = obs?.current_network === n;
+    const test = dist.find(d => d.network_id === n);
+    const tag = test ? `<span class="tag test" title="${esc(test.label)}">test</span>` :
+      up === false ? '<span class="tag down">down</span>' : inuse ? '<span class="tag serving">in use</span>' : "";
+    const v = !x ? "no data" : !up ? "no coverage" : `${fmt(x.rtt_ms)} ms · loss ${fmt(x.loss * 100, 1)}% · q ${fmt(x.quality * 100)}%`;
+    return `<div class="card ${inuse ? "inuse" : ""} ${up === false ? "down" : ""}"><div class="t" title="${esc(W.networks[n].label)}"><span class="sw" style="background:${netColor(n)}"></span>${esc(CARD_NET[n])}${tag}</div><div class="v">${v}</div></div>`;
+  }).join("");
+  $("srvCards").innerHTML = SRVS.map(id => {
+    const x = obs?.servers?.[id];
+    const serving = obs?.current_server === id;
+    const cand = obs?.candidate?.server === id;
+    const tag = serving ? '<span class="tag serving">serving</span>' : cand ? '<span class="tag cand">preparing</span>' : "";
+    const v = x ? `processing ~${fmt(x.expected_inference_ms)} ms · CPU ${fmt(x.cpu * 100)}%` : "no data";
+    return `<div class="card ${serving ? "inuse" : ""}"><div class="t">Server ${id}${tag}</div><div class="v">${esc(W.servers[id].label.split(" - ")[1] || "")} · ${v}</div></div>`;
+  }).join("");
+}
 
-// ------------------------------------------------------------------ state
-const S = {
-  position:0, zone:'standing by', nets:{}, edges:{}, agents:{}, activeEdge:'A',
-  activeNetwork:'wifi', handoff:'STABLE', targetEdge:null, e2e:null, hist:[],
-  running:false, mode:'echo',
+function lateFor(s) { return s?.late_by_threshold?.[String(threshold)]; }
+
+function renderKpis() {
+  const s = V.summary;
+  const last = V.points.length ? V.points[V.points.length - 1] : null;
+  const lastLost = V.lost.length ? V.lost[V.lost.length - 1] : null;
+  const cur = last ? last.ms : null;
+  let st = "";
+  if (lastLost && (!last || lastLost.t > last.t)) st = '<span class="status lost">✕ result lost</span>';
+  else if (cur != null) st = cur > threshold ? '<span class="status late">▲ late</span>' : '<span class="status ok">✓ on time</span>';
+  const late = lateFor(s);
+  const playback = (V.profile || "") === "buffered_playback";
+  if (playback) st = '<span class="hint">segments are fetched ahead; the buffer, not the deadline, decides the experience</span>';
+  const k = [
+    `<div class="kpi hero" data-m="current_response_ms"><div><div class="l">Current response time</div><div class="n">${fmt(cur)}<small>ms</small></div></div>${st}</div>`,
+    playback
+      ? `<div class="kpi" data-m="playback_stalls"><div class="l">Playback stalls</div><div class="n">${fmt(s?.playback_stalls)}</div><div class="s">${s ? `${fmt(s.playback_stall_time_s, 1)} s stalled · lowest buffer ${fmt(s.min_buffer_s, 1)} s` : ""}</div></div>`
+      : `<div class="kpi" data-m="late_by_threshold"><div class="l">Late results (&gt; ${threshold} ms or lost)</div><div class="n">${late ? fmt(late.pct, 1) : "—"}<small>%</small></div><div class="s">${late ? `${late.late} of ${s.requests_generated} requests` : ""}</div></div>`,
+    `<div class="kpi" data-m="p95_ms"><div class="l">p95 response time</div><div class="n">${fmt(s?.p95_ms)}<small>ms</small></div><div class="s">95% of completed results were faster</div></div>`,
+    `<div class="kpi" data-m="results_lost"><div class="l">Lost results</div><div class="n">${fmt(s?.results_lost)}</div><div class="s">no usable result within ${"2.5"} s</div></div>`,
+    `<div class="kpi" data-m="longest_gap_ms"><div class="l">Longest result gap</div><div class="n">${fmt(s?.longest_gap_ms)}<small>ms</small></div><div class="s">longest time with no result at all</div></div>`,
+    `<div class="kpi" data-m="completed_handovers"><div class="l">Completed handovers</div><div class="n">${fmt(s?.completed_handovers)}</div><div class="s">${s ? `${s.failed_handovers} failed · ${s.path_migrations} network-only moves · ${s.reconnects} reconnects` : ""}</div></div>`,
+    `<div class="kpi" data-m="unnecessary_reversals"><div class="l">Unnecessary reversals</div><div class="n">${fmt(s?.unnecessary_reversals)}</div><div class="s">switched back to the server just left within ${s ? fmt(s.reversal_window_s) : 10} s</div></div>`,
+  ];
+  $("kpis").innerHTML = k.join("");
+  $("bufferBox").style.display = playback ? "block" : "none";
+  if (playback) {
+    const b = V.playback;
+    $("bufN").innerHTML = `${fmt(b?.buffer_s, 1)}<small>s</small>`;
+    $("bufBar").style.width = `${Math.min(100, (b?.buffer_s || 0) / 10 * 100)}%`;
+    $("bufS").textContent = b ? `${b.stalls} playback stalls · ${fmt(b.stall_time_s, 1)} s stalled · ${b.stalled ? "STALLED" : b.playing ? "playing" : "filling before start"}` : "";
+  }
+}
+
+// chart
+let chartGeom = null;
+function renderChart() {
+  const cv = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const col = (v) => css.getPropertyValue(v).trim();
+  const L = 46, R = 10, T = 12, B = 24;
+  const tmax = Math.max(10, V.duration || 90, V.t);
+  const ymax = 400;
+  const X = (t) => L + (t / tmax) * (w - L - R);
+  const Y = (ms) => T + (1 - Math.min(ms, ymax) / ymax) * (h - T - B);
+  chartGeom = {X, Y, tmax, ymax, L, R, T, B, w, h};
+  c.font = "11px system-ui"; c.fillStyle = col("--dim"); c.strokeStyle = col("--line");
+  c.lineWidth = 1;
+  for (let ms = 0; ms <= ymax; ms += 100) {
+    c.beginPath(); c.moveTo(L, Y(ms)); c.lineTo(w - R, Y(ms)); c.stroke();
+    c.fillText(ms + " ms", 4, Y(ms) + 4);
+  }
+  for (let s = 0; s <= tmax; s += (tmax > 60 ? 15 : 10)) c.fillText(s + " s", X(s) - 8, h - 6);
+  // markers
+  V.markers.forEach(m => {
+    c.strokeStyle = m.kind === "server" ? col("--accent") : m.kind === "path" ? col("--net-wifi") : m.kind === "test" ? col("--warn") : col("--crit");
+    c.setLineDash(m.kind === "test" ? [2, 3] : m.kind === "failed" ? [6, 3] : []); c.lineWidth = 2;
+    c.beginPath(); c.moveTo(X(m.t), T); c.lineTo(X(m.t), h - B); c.stroke();
+  });
+  c.setLineDash([]);
+  // deadline
+  c.strokeStyle = col("--text"); c.setLineDash([6, 4]); c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(L, Y(threshold)); c.lineTo(w - R, Y(threshold)); c.stroke(); c.setLineDash([]);
+  c.fillStyle = col("--text"); c.fillText(`deadline ${threshold} ms`, w - R - 100, Y(threshold) - 5);
+  // lost
+  c.strokeStyle = col("--crit"); c.lineWidth = 2;
+  V.lost.forEach(p => { c.beginPath(); c.moveTo(X(p.t), T); c.lineTo(X(p.t), T + 10); c.stroke(); });
+  // points
+  const on = col("--series"), late = col("--warn");
+  V.points.forEach(p => {
+    c.fillStyle = p.ms > threshold ? late : on;
+    if (p.ms > ymax) { const x = X(p.t); c.beginPath(); c.moveTo(x, T); c.lineTo(x - 4, T + 7); c.lineTo(x + 4, T + 7); c.fill(); }
+    else { c.beginPath(); c.arc(X(p.t), Y(p.ms), 2.2, 0, 7); c.fill(); }
+  });
+  // now cursor in replay
+  if (source === "replay") { c.strokeStyle = col("--muted"); c.lineWidth = 1; c.beginPath(); c.moveTo(X(V.t), T); c.lineTo(X(V.t), h - B); c.stroke(); }
+}
+
+$("chart").addEventListener("mousemove", (ev) => {
+  if (!chartGeom) return;
+  const r = ev.target.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  let best = null, bd = 144;
+  for (const p of V.points) {
+    const dx = chartGeom.X(p.t) - mx, dy = chartGeom.Y(p.ms) - my, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = p; }
+  }
+  const tip = $("tip");
+  const mk = V.markers.find(m => Math.abs(chartGeom.X(m.t) - mx) < 4);
+  if (!best && !mk) { tip.style.display = "none"; return; }
+  tip.innerHTML = best ? `<b>${fmt(best.ms, 1)} ms</b> ${best.ms > threshold ? '<span style="color:var(--warn)">late</span>' : '<span style="color:var(--good)">on time</span>'}<br>request ${best.n} · Server ${esc(best.srv)} over ${esc(NET_SHORT[best.net] || best.net)}<br>result at ${fmt(best.t, 2)} s`
+    : `<b>${esc(mk.label)}</b><br>at ${fmt(mk.t, 2)} s`;
+  tip.style.display = "block";
+  tip.style.left = Math.min(mx + 26, r.width - 230) + "px"; tip.style.top = Math.max(0, my - 10) + "px";
+});
+$("chart").addEventListener("mouseleave", () => $("tip").style.display = "none");
+
+function renderDecision() {
+  const d = V.decision;
+  const phase = V.handoff.phase;
+  let act = d ? d.action : null;
+  if (["selected", "prepare", "transfer", "check", "switch", "finish_old_work"].includes(phase)) act = "handoff";
+  const [label, cls] = ACTIONS[act] || ["—", "hold"];
+  $("actBadge").textContent = act === "handoff" && ["selected", "prepare", "transfer", "check"].includes(phase) ? "Preparing another server" : label;
+  $("actBadge").className = "act " + cls;
+  $("actTarget").textContent = d && d.target_server ? `→ Server ${d.target_server} over ${NET_SHORT[d.target_network] || d.target_network}` +
+    (d.target_expected_ms != null ? ` · expected ${fmt(d.target_expected_ms)} ms vs ${fmt(d.current_expected_ms)} ms now` : "") :
+    d && d.current_expected_ms != null ? `current expected response ${fmt(d.current_expected_ms)} ms` : "";
+  $("actReason").textContent = d ? (d.reason.charAt(0).toUpperCase() + d.reason.slice(1)) + (d.veto ? ` (guard: ${d.veto})` : "") : "No mission loaded yet.";
+  $("explain").textContent = V.explanation || "—";
+  const rows = (V.candidates || []).slice(0, 6);
+  $("candTable").innerHTML = `<tr><th>Server</th><th>Network</th><th class="num">Expected response</th><th class="num">Path RTT</th><th class="num">Processing</th><th class="num">Score (lower = better)</th></tr>` +
+    rows.map(c => `<tr${V.current && c.edge_id === V.current.edge_id && c.network_id === V.current.network_id ? ' style="font-weight:700"' : ""}><td>Server ${c.edge_id}</td><td>${esc(NET_SHORT[c.network_id])}</td><td class="num">${fmt(c.e2e_ms)} ms</td><td class="num">${fmt(c.path_rtt_ms)} ms</td><td class="num">${fmt(c.inference_ms)} ms</td><td class="num">${fmt(c.score, 1)}</td></tr>`).join("");
+  const det = d?.detail;
+  $("candNote").textContent = det ? `Policy: ${d.policy}. Forecast horizon ${det.horizon_s} s · switch margin ${det.margin_pct}% · patience ${det.patience} checks · cooldown ${det.orchestrator?.cooldown_s} s. Bold row = current server and network.` : "";
+}
+
+function renderSteps() {
+  const hs = V.handoff, order = STEPS.map(s => s[0]);
+  const idx = order.indexOf(hs.phase);
+  $("steps").innerHTML = STEPS.map(([k, name, desc], i) => {
+    let cls = "";
+    if (hs.phase === "complete") cls = "done";
+    else if (hs.phase === "failed" || hs.failed) cls = order.indexOf(hs.failed) === i ? "failed" : (order.indexOf(hs.failed) > i ? "done" : "");
+    else if (idx === i) cls = "active";
+    else if (idx > i) cls = "done";
+    const ms = hs.times?.[k];
+    return `<div class="step ${cls}"><div class="k">${name}</div><div class="d">${desc}</div><div class="ms">${ms != null ? fmt(ms) + " ms" : ""}</div></div>`;
+  }).join("");
+  let txt = "No handover in progress.";
+  if (["selected", ...order].includes(hs.phase)) txt = `<b>Handing over</b> Server ${esc(hs.source)} → Server ${esc(hs.target)} over ${esc(NET_SHORT[hs.network] || hs.network || "")}. Server ${esc(hs.source)} keeps serving until the switch.`;
+  else if (hs.phase === "complete") txt = `<b>Last handover completed</b>: Server ${esc(hs.source)} → Server ${esc(hs.target)} in ${fmt(hs.total)} ms.`;
+  else if (hs.phase === "failed") txt = `<b style="color:var(--crit)">Last handover refused</b> at “${esc(hs.failed)}”: ${esc(hs.reason)}. The session stayed on Server ${esc(hs.source)}; nothing was lost.`;
+  $("hstate").innerHTML = txt;
+  const te = $("testEvent");
+  if (V.faultNote) { te.style.display = "block"; te.textContent = "⚑ " + V.faultNote; } else te.style.display = "none";
+}
+
+function renderContinuity() {
+  const c = V.cont;
+  $("contKv").innerHTML = `
+    <dt>Session</dt><dd>${esc(c.session || "—")}</dd>
+    <dt>Current server</dt><dd>${esc(V.obs?.current_server || c.server || "—")}</dd>
+    <dt>State version</dt><dd>${fmt(c.version)}</dd>
+    <dt>Last completed request</dt><dd>${fmt(c.lastReq)}</dd>
+    <dt>Transferred payload</dt><dd>${c.bytes != null ? c.bytes + " bytes (session only; the model is already on every server)" : "—"}</dd>`;
+  const k = c.check, v = $("verdict");
+  if (!k) { v.className = "verdict"; v.innerHTML = '<div class="h">No server change yet</div><div class="p">A check runs before every switch and again on the first result from the new server.</div>'; return; }
+  v.className = "verdict " + (k.ok ? "ok" : "bad");
+  const head = k.ok
+    ? (k.stage === "before_switch" ? `✓ Server ${esc(k.server)} holds the transferred session` : `✓ The server changed. The session identity and progress continued.`)
+    : (k.stage === "after_reconnect" ? `✕ Progress restarted after reconnecting (state version ${fmt(k.reported_state_version)} after ${fmt(k.baseline_state_version)})` : `✕ Continuity check failed on Server ${esc(k.server)}`);
+  const checks = k.checks ? Object.entries(k.checks).map(([a, b]) => `${b ? "✓" : "✕"} ${a.replace(/_/g, " ")}`).join(" · ") : "";
+  v.innerHTML = `<div class="h">${head}</div><div class="p">Property checked: ${esc(k.property)}.</div><div class="p">${checks}</div>`;
+}
+
+function renderLog() {
+  $("log").innerHTML = V.log.slice(-120).reverse().map(l =>
+    `<div><span class="t">${fmt(l.t, 1)}s</span><span class="ic ${l.cls}">${l.icon}</span><span class="${l.cls}">${esc(l.text)}</span></div>`).join("");
+}
+
+// ------------------------------------------------------------------ live
+let ws = null;
+function connectLive() {
+  if (ws) return;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/api/live/events`);
+  ws.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    if (e.event_type === "_live_run_changed") {
+      liveRunId = e.run_id;
+      if (source === "live" || followLive) { stopReplay(); source = "live"; V = freshView(); V.runId = e.run_id; V.origin = "live"; markDirty(); }
+      refreshStatus();
+      return;
+    }
+    if (source !== "live") return;
+    if (V.runId && e.run_id !== V.runId) return;
+    apply(e); markDirty();
+    if (e.event_type === "mission_completed") { setTimeout(() => { refreshRuns(); refreshComparisons(); refreshStatus(); }, 1500); }
+  };
+  ws.onclose = () => { ws = null; setTimeout(connectLive, 1500); };
+}
+let followLive = false;
+
+async function startLive() {
+  const body = {scenario_id: $("selScenario").value, controller_mode: $("selMode").value,
+    application_profile: $("selProfile").value, seed: Number($("inSeed").value || 7)};
+  followLive = true; source = "live"; stopReplay(); V = freshView(); V.origin = "live"; markDirty();
+  hideIntro();
+  try {
+    const r = await (await api("/api/runs", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+    liveRunId = r.run_id; if (!V.runId) V.runId = r.run_id;
+    toast(`Live run started: ${r.run_id}`);
+  } catch (e) { toast("Could not start: " + e.message); }
+  refreshStatus();
+}
+async function stopLive() {
+  if (!liveRunId) return;
+  try { await api(`/api/runs/${encodeURIComponent(liveRunId)}/stop`, {method: "POST"}); toast("Run stopped; its partial evidence was kept."); }
+  catch (e) { toast(e.message); }
+  refreshStatus(); setTimeout(refreshRuns, 800);
+}
+async function runComparison() {
+  const body = {scenario_id: $("selScenario").value, application_profile: $("selProfile").value, seed: Number($("inSeed").value || 7)};
+  followLive = true; source = "live"; stopReplay(); V = freshView(); markDirty(); hideIntro();
+  try { await api("/api/comparisons", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); toast("Running all four controllers, one after another."); }
+  catch (e) { toast("Could not start: " + e.message); }
+  refreshStatus();
+}
+async function refreshStatus() {
+  try {
+    const s = await (await api("/api/status")).json();
+    const busy = s.busy || (s.comparison_job && s.comparison_job.status === "running");
+    $("btnStart").disabled = busy; $("btnCompare").disabled = busy; $("btnStop").disabled = !s.busy;
+    if (s.live_run) liveRunId = s.live_run.run_id;
+    if (s.comparison_job && s.comparison_job.status === "running")
+      $("btnCompare").textContent = `Comparison running (${s.comparison_job.run_ids.length}/${s.comparison_job.modes.length})`;
+    else $("btnCompare").textContent = "Run all four controllers";
+    if (busy) setTimeout(refreshStatus, 3000);
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------------ replay
+let R = null;   // {events, i, t, playing, speed, last}
+let replaySpeed = 1;
+function syncPlaybackControls() {
+  for (const b of $("speedSeg").querySelectorAll("button")) {
+    const selected = Number(b.dataset.s) === replaySpeed;
+    b.classList.toggle("on", selected);
+    b.setAttribute("aria-pressed", String(selected));
+  }
+  if (!R) { $("playbackStatus").textContent = ""; return; }
+  const ended = R.i >= R.events.length;
+  $("btnPlay").textContent = ended ? "Replay again" : R.playing ? "Pause" : "Play";
+  $("playbackStatus").textContent = ended ? "Finished · choose a speed to replay" : `${R.playing ? "Playing" : "Paused"} at ${replaySpeed}×`;
+}
+async function replay(runId) {
+  hideIntro();
+  let info, text;
+  try {
+    info = await (await api(`/api/runs/${encodeURIComponent(runId)}`)).json();
+    text = await (await api(`/api/runs/${encodeURIComponent(runId)}/recording`)).text();
+  } catch (e) { toast("Cannot replay: " + e.message); return; }
+  const events = text.split("\n").filter(Boolean).map(l => JSON.parse(l));
+  followLive = false; source = "replay";
+  const conf = info.configuration;
+  syncSelectors(conf.scenario_id, conf.controller_mode, conf.application_profile);
+  const end = events.length ? events[events.length - 1].elapsed_time : 0;
+  R = {events, i: 0, t: 0, playing: true, speed: replaySpeed, last: performance.now(), end, runId,
+       origin: info.manifest?.data_origin, conf};
+  resetReplayView();
+  $("replayBar").classList.add("on"); syncPlaybackControls();
+  markDirty();
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+function resetReplayView() {
+  V = freshView(); V.runId = R.runId; V.origin = R.origin; V.duration = R.conf.duration_s;
+  V.scenario = R.conf.scenario_id; V.profile = R.conf.application_profile; V.mode = R.conf.controller_mode;
+  R.i = 0;
+}
+function seek(t) {
+  resetReplayView();
+  while (R.i < R.events.length && R.events[R.i].elapsed_time <= t) apply(R.events[R.i++]);
+  R.t = t; V.t = t; R.last = performance.now(); syncPlaybackControls(); markDirty();
+  $("scrub").value = Math.round(1000 * Math.min(1, t / Math.max(R.end, 0.1)));
+  $("clock").textContent = `${fmt(Math.min(t, R.end), 1)} / ${fmt(R.end, 0)} s`;
+}
+function stopReplay() { if (R) { R = null; $("replayBar").classList.remove("on"); syncPlaybackControls(); } }
+function tickReplay(now) {
+  if (R && R.playing) {
+    const dt = (now - R.last) / 1000; R.t += dt * R.speed;
+    let n = 0;
+    while (R.i < R.events.length && R.events[R.i].elapsed_time <= R.t) { apply(R.events[R.i++]); n++; }
+    V.t = Math.min(R.t, R.end);
+    if (n) markDirty();
+    if (R.i >= R.events.length) { R.playing = false; syncPlaybackControls(); markDirty(); }
+    $("scrub").value = Math.round(1000 * Math.min(1, R.t / Math.max(R.end, 0.1)));
+    $("clock").textContent = `${fmt(Math.min(R.t, R.end), 1)} / ${fmt(R.end, 0)} s`;
+  }
+  if (R) R.last = now;
+  requestAnimationFrame(tickReplay);
+}
+$("btnPlay").onclick = () => {
+  if (!R) return;
+  if (R.i >= R.events.length) { seek(0); R.playing = true; }
+  else R.playing = !R.playing;
+  R.last = performance.now(); syncPlaybackControls(); markDirty();
+};
+$("scrub").oninput = (e) => { if (R) seek(R.end * e.target.value / 1000); };
+$("speedSeg").onclick = (e) => {
+  const b = e.target.closest("button[data-s]"); if (!b) return;
+  replaySpeed = Number(b.dataset.s);
+  if (R) {
+    R.speed = replaySpeed;
+    if (R.i >= R.events.length) { seek(0); R.playing = true; }
+    R.last = performance.now();
+  }
+  syncPlaybackControls(); markDirty();
 };
 
-const camTarget = new THREE.Vector3();
-camera.position.set(xOf(0) - 12, 5.6, 1.4);
-let phase = 0; const clock = new THREE.Clock();
-
-function frame(){
-  requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), .05);
-
-  const targetX = xOf(S.position);
-  walker.position.x += (targetX - walker.position.x) * (1 - Math.pow(0.02, dt));
-  const moving = S.running;
-  phase += dt * (moving ? 6.4 : 1.0);
-  const swing = moving ? .34 : .015;
-  legs.forEach(L => {
-    const p = phase + L.phase;
-    L.hip.rotation.z  = 0.22 + Math.sin(p) * swing;
-    L.knee.rotation.z = -0.50 - Math.max(0, Math.sin(p + 1.15)) * (moving ? .42 : .02);
-  });
-  // body bobs at twice the gait frequency, as a trot does
-  robot.position.y = Math.abs(Math.sin(phase)) * .035;
-  robot.rotation.z = Math.sin(phase) * (moving ? .012 : 0);
-
-  const health = S.e2e == null ? .5 : Math.max(.12, Math.min(1, 160 / Math.max(40, S.e2e)));
-  ledMat.emissiveIntensity = .4 + health * 1.7;
-  glow.intensity = .5 + health * 1.8;
-
-  const from = new THREE.Vector3(walker.position.x + .16, 2.62, 0);
-  const tw = towers[S.activeEdge];
-  let pts = null;
-  if (tw){
-    pts = curveTo(activeBeam, from, tw.top, 3.4 + Math.abs(from.x - tw.top.x) * .10);
-    activeBeam.material.opacity = .6 + Math.sin(phase*2)*.12;
-  }
-  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING'].indexOf(S.handoff) >= 0;
-  if (staging && S.targetEdge && towers[S.targetEdge]){
-    curveTo(prepareBeam, from, towers[S.targetEdge].top,
-            3.4 + Math.abs(from.x - towers[S.targetEdge].top.x) * .10);
-    prepareBeam.material.opacity = .4 + Math.sin(phase*6)*.32;
-  } else prepareBeam.material.opacity = 0;
-
-  packets.forEach(p => {
-    if (!pts || !S.running){ p.mesh.visible = false; return; }
-    p.mesh.visible = true;
-    p.t = (p.t + dt * .85) % 1;
-    const idx = Math.min(22, Math.floor(p.t * 23));
-    p.mesh.position.copy(pts[idx]).lerp(pts[idx+1], p.t*23 - idx);
-    p.mesh.material.opacity = .3 + .6*Math.sin(Math.PI*p.t);
-  });
-
-  EDGE_ORDER.forEach(eid => {
-    const t = towers[eid], h = S.edges[eid] || {};
-    const lit = Math.round((h.cpu || .15) * t.units.length);
-    t.units.forEach((u, i) => {
-      const on = i < lit;
-      u.material.emissiveIntensity += ((on ? .8 : .08) - u.material.emissiveIntensity) * .12;
-      u.material.opacity += ((on ? .95 : .4) - u.material.opacity) * .12;
-    });
-    const isActive = eid === S.activeEdge, isTarget = eid === S.targetEdge && staging;
-    t.body.material.emissiveIntensity += ((isActive ? .5 : .05) - t.body.material.emissiveIntensity)*.1;
-    t.halo.material.color.setHex(isTarget ? 0xffffff : 0xff6b00);
-    t.halo.material.opacity = isActive ? .5 + Math.sin(phase*2.4)*.18
-                            : isTarget ? .45 + Math.sin(phase*7)*.3 : .14;
-    t.halo.scale.setScalar(isActive ? 1.12 : 1);
-  });
-
-  NET_ORDER.forEach(nid => {
-    const q = (S.nets[nid] && S.nets[nid].quality) || 0;
-    bands[nid].material.opacity += (0.03 + q*0.14 - bands[nid].material.opacity) * .1;
-  });
-
-  camTarget.set(walker.position.x + 1.4, 1.7, -2.6);
-  const cx = camTarget.x - Math.cos(yaw) * dist * Math.cos(pitch);
-  const cz = camTarget.z - Math.sin(yaw) * dist * Math.cos(pitch);
-  const cy = camTarget.y + dist * Math.sin(pitch);
-  if (follow) camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.pow(0.02, dt));
-  else camera.position.set(cx, cy, cz);
-  camera.lookAt(camTarget);
-  renderer.render(scene, camera);
+// ------------------------------------------------------------------ comparison + evidence
+let COMPS = [], RUNS = [];
+const CMP_ROWS = [
+  ["late", "Late results (> threshold or lost)", "%"],
+  ["p95_ms", "p95 response time", "ms"],
+  ["median_ms", "Median response time", "ms"],
+  ["results_lost", "Lost results", ""],
+  ["longest_gap_ms", "Longest result gap", "ms"],
+  ["completed_handovers", "Completed handovers", ""],
+  ["failed_handovers", "Failed handovers", ""],
+  ["reconnects", "Reconnects (session rebuilt)", ""],
+  ["unnecessary_reversals", "Unnecessary reversals", ""],
+  ["time_on_suboptimal_server_s", "Time on a server that was not the best", "s"],
+  ["continuity_checks_failed", "Continuity checks failed", ""],
+  ["playback_stalls", "Playback stalls", ""],
+  ["min_buffer_s", "Lowest buffer while playing", "s"],
+];
+async function refreshComparisons(selectId) {
+  try { COMPS = (await (await api("/api/comparisons")).json()).comparisons; } catch (e) { return; }
+  const sel = $("selComparison"); const prev = selectId || sel.value;
+  sel.innerHTML = COMPS.map(c => {
+    const s = scenById(c.scenario_id);
+    const origins = new Set(Object.values(c.modes).map(m => m.data_origin));
+    return `<option value="${esc(c.comparison_id)}">${esc(s ? s.title : c.scenario_id)} · ${esc(c.application_profile)} · seed ${esc(c.seed)} · ${[...origins].join("/")} · ${esc(c.created_at)}</option>`;
+  }).join("");
+  if (prev && COMPS.some(c => c.comparison_id === prev)) sel.value = prev;
+  else { const pick = COMPS.find(c => c.scenario_id === $("selScenario").value && [...Object.values(c.modes)].every(m => m.data_origin === "live")) || COMPS[0]; if (pick) sel.value = pick.comparison_id; }
+  renderComparison();
 }
-frame();
-
-// ------------------------------------------------------------------ HUD
-const el = id => document.getElementById(id);
-const fmt = (v, d, unit) => (v == null || Number.isNaN(v)) ? '-' : v.toFixed(d || 0) + (unit || '');
-
-NET_ORDER.forEach(nid => {
-  const d = document.createElement('div');
-  d.className = 'net'; d.id = 'net-'+nid; d.style.setProperty('--nc', NETS[nid].colour);
-  d.innerHTML =
-    '<div class="nh"><span class="nm">' + NETS[nid].label + '</span>' +
-      '<span class="badge" id="badge-' + nid + '">watching</span></div>' +
-    '<div class="sig"><div class="track"><i id="q-' + nid + '" style="width:0%"></i></div>' +
-      '<span class="pct" id="qv-' + nid + '">-</span></div>' +
-    '<div class="trend" id="tr-' + nid + '">&nbsp;</div>' +
-    '<div class="chars">' +
-      '<div class="ch"><label>Latency</label><div class="track"><i class="fill-bad" id="b-rtt-' + nid + '" style="width:0%"></i></div><b id="v-rtt-' + nid + '">-</b></div>' +
-      '<div class="ch"><label>Jitter</label><div class="track"><i class="fill-bad" id="b-jit-' + nid + '" style="width:0%"></i></div><b id="v-jit-' + nid + '">-</b></div>' +
-      '<div class="ch"><label>Loss</label><div class="track"><i class="fill-bad" id="b-loss-' + nid + '" style="width:0%"></i></div><b id="v-loss-' + nid + '">-</b></div>' +
-      '<div class="ch"><label>Bandwidth</label><div class="track"><i class="fill-good" id="b-bw-' + nid + '" style="width:0%"></i></div><b id="v-bw-' + nid + '">-</b></div>' +
-    '</div>';
-  el('nets').appendChild(d);
-});
-
-EDGE_ORDER.forEach(eid => {
-  const d = document.createElement('div');
-  d.className = 'edge'; d.id = 'edge-'+eid;
-  d.innerHTML =
-    '<div class="eh"><span class="eid">' + eid + '</span><span class="en">' + EDGES[eid].label + '</span>' +
-      '<span class="est" id="est-' + eid + '">standby</span></div>' +
-    '<div class="emet">' +
-      '<div><span>infer</span><b id="inf-' + eid + '">-</b></div>' +
-      '<div><span>cpu</span><b id="cpuv-' + eid + '">-</b></div>' +
-      '<div><span>sessions</span><b id="ses-' + eid + '">0</b></div>' +
-    '</div>';
-  el('edges').appendChild(d);
-});
-
-AGENTS.forEach((a, i) => {
-  const d = document.createElement('div');
-  d.className = 'agent'; d.id = 'ag-' + a[0];
-  d.innerHTML =
-    '<div class="ah"><span class="num">' + (i+1) + '</span><span class="an">' + a[1] + '</span>' +
-      '<span class="pulse"></span></div>' +
-    '<div class="aq">' + a[2] + '</div>' +
-    '<div class="av" id="av-' + a[0] + '"><span class="g">idle</span></div>';
-  el('agents').appendChild(d);
-});
-
-el('pipeline').innerHTML = STEPS.map(s => '<span class="step" id="step-' + s + '">' + s + '</span>').join('');
-
-function bar(id, value, max){
-  const n = el(id); if (!n) return;
-  n.style.width = Math.max(0, Math.min(100, (value/max)*100)).toFixed(0) + '%';
-}
-
-function renderNetworks(){
-  const trends = (S.agents.predictor && S.agents.predictor.trends) || {};
-  NET_ORDER.forEach(nid => {
-    const n = S.nets[nid] || {}, tr = trends[nid] || {};
-    const box = el('net-'+nid);
-    const up = n.available !== false;
-    box.classList.toggle('active', nid === S.activeNetwork);
-    box.classList.toggle('down', !up);
-
-    bar('q-'+nid, (n.quality||0)*100, 100);
-    el('qv-'+nid).textContent = up ? ((n.quality||0)*100).toFixed(0)+'%' : '--';
-
-    const badge = el('badge-'+nid);
-    badge.textContent = nid === S.activeNetwork ? 'IN USE' : (up ? 'WATCHING' : 'NO COVERAGE');
-    badge.className = 'badge' + (nid === S.activeNetwork ? ' live' : (up ? '' : ' dead'));
-
-    const t = el('tr-'+nid);
-    if (!up){ t.textContent = 'unavailable at this position'; t.className = 'trend'; }
-    else if (tr.degrading && tr.seconds_to_unusable != null && tr.seconds_to_unusable < 20){
-      t.textContent = 'predicted unusable in ' + tr.seconds_to_unusable.toFixed(1) + 's';
-      t.className = 'trend bad';
-    } else if (tr.degrading){
-      t.textContent = 'degrading - ' + fmt(tr.predicted_rtt_ms,0) + 'ms predicted in 2s';
-      t.className = 'trend bad';
-    } else if (tr.quality_slope > 0.005){
-      t.textContent = 'improving - ' + fmt(tr.predicted_rtt_ms,0) + 'ms predicted in 2s';
-      t.className = 'trend good';
-    } else { t.textContent = 'steady'; t.className = 'trend'; }
-
-    if (up){
-      bar('b-rtt-'+nid, n.rtt_ms||0, 700);   el('v-rtt-'+nid).textContent = fmt(n.rtt_ms,0,'ms');
-      bar('b-jit-'+nid, n.jitter_ms||0, 50); el('v-jit-'+nid).textContent = fmt(n.jitter_ms,1,'ms');
-      bar('b-loss-'+nid, (n.loss||0)*100, 15); el('v-loss-'+nid).textContent = fmt((n.loss||0)*100,2,'%');
-      bar('b-bw-'+nid, n.bandwidth_mbps||0, 700);
-      el('v-bw-'+nid).textContent = fmt(n.bandwidth_mbps,0,'M');
-    } else {
-      ['rtt','jit','loss','bw'].forEach(k => {
-        bar('b-'+k+'-'+nid, 0, 1); el('v-'+k+'-'+nid).textContent = '-';
-      });
-    }
+function renderComparison() {
+  const c = COMPS.find(x => x.comparison_id === $("selComparison").value);
+  $("prov").classList.remove("on");
+  if (!c) { $("cmpTable").innerHTML = '<tr><td class="muted">No comparisons recorded yet. Use “Run all four controllers”.</td></tr>'; $("cmpNote").textContent = ""; return; }
+  const modes = Object.keys(c.modes);
+  const playback = c.application_profile === "buffered_playback";
+  let h = `<tr><th>Metric</th>${modes.map(m => `<th class="num">${esc(modeLabel(m))}${m === META.caps?.default_mode ? " (default)" : ""}</th>`).join("")}</tr>`;
+  CMP_ROWS.forEach(([key, name, unit]) => {
+    if (!playback && (key === "playback_stalls" || key === "min_buffer_s")) return;
+    if (playback && key === "late") return;
+    const lab = key === "late" ? `Late results (&gt; ${threshold} ms or lost)` : esc(name);
+    h += `<tr><td>${lab}</td>` + modes.map(m => {
+      const mm = c.modes[m].metrics;
+      let v = key === "late" ? mm.late_by_threshold?.[String(threshold)]?.pct : mm[key];
+      const shown = v === null || v === undefined ? "—" : `${fmt(v, unit === "%" || unit === "s" ? 1 : 0)}${unit ? " " + unit : ""}`;
+      return `<td class="num"><button class="cmpcell" data-mode="${m}" data-key="${key}">${shown}</button></td>`;
+    }).join("") + "</tr>";
   });
+  h += `<tr><td class="muted">Evidence</td>${modes.map(m => `<td class="num"><button class="btn small" data-replay="${esc(c.modes[m].run_id)}">Replay</button> <a class="btn small" href="/api/runs/${encodeURIComponent(c.modes[m].run_id)}/export">Download</a></td>`).join("")}</tr>`;
+  $("cmpTable").innerHTML = h;
+  const origins = new Set(Object.values(c.modes).map(m => m.data_origin));
+  $("cmpNote").innerHTML = `Scenario ${esc(c.scenario_id)} v${esc(c.scenario_version)} · seed ${esc(c.seed)} · one run per controller (single seed, not a distribution) · origin: ${[...origins].join(", ")}` + (c.note ? ` · ${esc(c.note)}` : "") + ` · comparison <code>${esc(c.comparison_id)}</code>`;
 }
+$("cmpTable").addEventListener("click", async (e) => {
+  const rb = e.target.closest("[data-replay]"); if (rb) { replay(rb.dataset.replay); return; }
+  const b = e.target.closest(".cmpcell"); if (!b) return;
+  const c = COMPS.find(x => x.comparison_id === $("selComparison").value);
+  const row = c.modes[b.dataset.mode];
+  let man = null; try { man = (await (await api(`/api/runs/${encodeURIComponent(row.run_id)}`)).json()).manifest; } catch (err) {}
+  const p = $("prov");
+  p.innerHTML = `<b>${esc(b.textContent)}</b> — ${esc(b.dataset.key === "late" ? `late_by_threshold["${threshold}"].pct` : b.dataset.key)} from <code>summary.json</code> of run <code>${esc(row.run_id)}</code><br>
+    Origin: <span class="origin ${esc(row.data_origin)}">${esc(row.data_origin)}</span> · controller ${esc(modeLabel(b.dataset.mode))} · code <code>${esc(row.code_version)}</code>
+    ${man ? ` · seed ${esc(man.seed)} · ${esc(man.duration_s)} s · ${esc(man.request_rate_hz)} req/s · scenario ${esc(man.scenario_id)} v${esc(man.scenario_version)} · finished ${esc(man.finished_at)} · ${man.event_count} events · schema ${man.schema_valid ? "valid" : "INVALID"}` : ""}<br>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <a class="btn small" href="/api/runs/${encodeURIComponent(row.run_id)}/export">Download evidence (.zip)</a>
+      <a class="btn small" href="/api/runs/${encodeURIComponent(row.run_id)}/summary" target="_blank">summary.json</a>
+      <a class="btn small" href="/api/runs/${encodeURIComponent(row.run_id)}" target="_blank">manifest + configuration</a>
+      <button class="btn small" data-verify="${esc(row.run_id)}">Verify file hashes</button>
+      <button class="btn small" data-replay="${esc(row.run_id)}">Replay this run</button></div>`;
+  p.classList.add("on");
+});
+$("prov").addEventListener("click", async (e) => {
+  const rb = e.target.closest("[data-replay]"); if (rb) { replay(rb.dataset.replay); return; }
+  const vb = e.target.closest("[data-verify]"); if (!vb) return;
+  const v = await (await api(`/api/runs/${encodeURIComponent(vb.dataset.verify)}/verify`)).json();
+  toast(v.ok ? "All files match the manifest hashes." : "Mismatch: " + v.problems.join(", "));
+});
+$("selComparison").onchange = renderComparison;
 
-function renderAgents(){
-  const a = S.agents; if (!a || !a.watcher) return;
-  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING','DRAINING'].indexOf(S.handoff) >= 0;
-  const set = (id, html, on) => {
-    el('av-'+id).innerHTML = html;
-    el('ag-'+id).classList.toggle('on', !!on);
+async function refreshRuns() {
+  try { RUNS = (await (await api("/api/runs")).json()).runs; } catch (e) { return; }
+  $("runsTable").innerHTML = `<tr><th>Run</th><th>Origin</th><th>Scenario</th><th>Controller</th><th>Profile</th><th>Status</th><th>Code</th><th class="num">p95</th><th class="num">Late (150 ms)</th><th></th></tr>` +
+    RUNS.slice(0, 60).map(r => `<tr><td style="font-family:var(--mono);font-size:11.5px">${esc(r.run_id)}</td>
+      <td><span class="origin ${esc(r.data_origin || "")}">${esc(r.data_origin || "—")}</span></td>
+      <td>${esc(r.scenario_id || "")}${r.scenario_version != null ? " v" + esc(r.scenario_version) : ""}</td><td>${esc(modeLabel(r.controller_mode))}</td>
+      <td>${esc(r.application_profile || "")}</td><td>${esc(r.status)}</td><td style="font-family:var(--mono);font-size:11.5px">${esc(r.code_version || "")}</td>
+      <td class="num">${fmt(r.headline?.p95_ms)} ms</td><td class="num">${fmt(r.headline?.late_results_pct, 1)}%</td>
+      <td>${r.status === "running" ? "" : `<button class="btn small" data-replay="${esc(r.run_id)}">Replay</button> <a class="btn small" href="/api/runs/${encodeURIComponent(r.run_id)}/export">Download</a>`}</td></tr>`).join("");
+}
+$("runsTable").addEventListener("click", (e) => { const b = e.target.closest("[data-replay]"); if (b) replay(b.dataset.replay); });
+
+// ------------------------------------------------------------------ setup
+function syncSelectors(sc, mode, prof) {
+  if (sc && scenById(sc)) $("selScenario").value = sc;
+  if (mode) $("selMode").value = mode;
+  if (prof) $("selProfile").value = prof;
+}
+function hideIntro() { $("intro").classList.add("hidden"); }
+async function init() {
+  const [caps, scen] = await Promise.all([api("/api/capabilities").then(r => r.json()), api("/api/scenarios").then(r => r.json())]);
+  META = {caps, scen};
+  $("selScenario").innerHTML = scen.scenarios.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join("");
+  $("selScenario").value = scen.default;
+  $("selMode").innerHTML = caps.controller_modes.map(m => `<option value="${m.id}" title="${esc(m.summary)}">${esc(m.label)}${m.id === caps.default_mode ? " (default)" : ""}</option>`).join("");
+  $("selMode").value = caps.default_mode;
+  $("selProfile").innerHTML = caps.application_profiles.map(p => `<option value="${p.id}" title="${esc(p.description)}">${esc(p.label)}</option>`).join("");
+  $("statusList").innerHTML = caps.status.map(s => `<div class="st"><div class="h">${esc(s.item)}<span class="origin ${esc(s.status)}">${esc(s.status)}</span></div><p>${esc(s.detail)}</p></div>`).join("");
+  $("extraList").innerHTML = caps.additional_experiments.map(s => `<div class="st"><div class="h">${esc(s.name)}<span class="origin separate">separate</span></div><p>${esc(s.evidence)}</p><p style="font-family:var(--mono);font-size:11px">ECHO_Project/${esc(s.folder)}</p></div>`).join("");
+  $("selScenario").onchange = () => { if (!source) markDirty(); refreshComparisons(); };
+  $("selProfile").onchange = markDirty;
+  $("btnStart").onclick = startLive; $("btnStop").onclick = stopLive; $("btnCompare").onclick = runComparison;
+  $("btnIntroLive").onclick = startLive; $("btnIntroHide").onclick = hideIntro;
+  $("btnIntroReplay").onclick = () => {
+    const pick = RUNS.find(r => r.scenario_id === "gradual_coverage" && r.controller_mode === caps.default_mode && r.data_origin === "live" && r.status === "completed") ||
+                 RUNS.find(r => r.status === "completed");
+    if (pick) replay(pick.run_id); else toast("No recorded run yet: run one live first.");
   };
-
-  set('watcher',
-      '<span class="k">' + a.watcher.networks + '</span> networks <span class="g">/</span> ' +
-      '<span class="k">' + a.watcher.edges + '</span> edges <span class="g">every ' +
-      a.watcher.tick_ms + 'ms</span><br><span class="g">' + a.watcher.samples +
-      ' samples held</span>', S.running);
-
-  const tr = a.predictor.trends || {};
-  const worry = Object.keys(tr).map(k => [k, tr[k]])
-    .filter(p => p[1].degrading || (p[1].seconds_to_unusable != null && p[1].seconds_to_unusable < 20))
-    .sort((x,y) => (x[1].seconds_to_unusable == null ? 1e9 : x[1].seconds_to_unusable)
-                 - (y[1].seconds_to_unusable == null ? 1e9 : y[1].seconds_to_unusable));
-  set('predictor', worry.length
-      ? worry.slice(0,2).map(p => '<span class="k">' + NETS[p[0]].label + '</span> ' +
-          (p[1].seconds_to_unusable != null && p[1].seconds_to_unusable < 20
-            ? 'unusable in ' + p[1].seconds_to_unusable.toFixed(1) + 's'
-            : 'degrading, ' + p[1].predicted_rtt_ms.toFixed(0) + 'ms in ' +
-              a.predictor.horizon_s + 's')).join('<br>')
-      : '<span class="g">all four links steady over the next ' + a.predictor.horizon_s + 's</span>',
-      worry.length > 0);
-
-  set('intent',
-      '<span class="k">' + a.intent.intent + '</span><br>' +
-      '<span class="g">' + a.intent.description + '</span><br>' +
-      (a.intent.live
-        ? '<span class="g">live - buffering cannot help</span>'
-        : '<span class="k">preload ' + a.intent.preload_buffer_s + 's</span> <span class="g">absorbs the switch</span>'),
-      true);
-
-  const c = a.decision.current, cands = a.decision.candidates || [];
-  let runner = null;
-  for (let i=0;i<cands.length;i++){
-    if (cands[i].edge_id !== c.edge_id || cands[i].network_id !== c.network_id){ runner = cands[i]; break; }
-  }
-  const streaks = a.decision.streaks || {};
-  const streakKeys = Object.keys(streaks);
-  set('decision',
-      'on <span class="k">' + c.edge_id + '/' + c.network_id + '</span> score ' + (c.score == null ? '-' : c.score) +
-      ' <span class="g">(' + (c.e2e_ms == null ? '-' : c.e2e_ms) + 'ms e2e)</span><br>' +
-      (runner ? 'next best <span class="k">' + runner.edge_id + '/' + runner.network_id + '</span> ' +
-                runner.score + ' <span class="g">(' + runner.e2e_ms + 'ms)</span><br>' : '') +
-      '<span class="g">needs ' + a.decision.margin_pct + '% for ' + a.decision.patience + ' ticks' +
-      (streakKeys.length ? ' - ' + streakKeys.map(k => k + ' at ' + streaks[k]).join(', ') : '') +
-      '</span>', true);
-
-  const o = a.orchestrator || {};
-  set('orchestrator',
-      'action <span class="k">' + (o.last_action || '-') + '</span>' +
-      (o.cooldown_left_s > 0 ? ' <span class="g">cooldown ' + o.cooldown_left_s + 's</span>' : '') +
-      '<br><span class="g">' + o.cycles + ' cycles, ' + o.moves + ' moves, ' +
-      o.vetoes + ' vetoed</span>' +
-      (o.last_veto ? '<br><span class="k">veto: ' + o.last_veto + '</span>' : ''),
-      o.last_action && o.last_action !== 'hold');
-
-  set('handoff',
-      'state <span class="k">' + a.handoff.state + '</span>' +
-      (S.targetEdge && staging ? ' <span class="g">to ' + S.targetEdge + '</span>' : '') + '<br>' +
-      '<span class="g">' + a.handoff.completed + ' completed, ' + a.handoff.failed + ' failed' +
-      (a.handoff.last_ms != null ? ', last ' + a.handoff.last_ms + 'ms' : '') + '</span><br>' +
-      '<span class="g">' + a.handoff.state_bytes + 'B state moved</span>', staging);
-
-  set('recovery', a.recovery.blocked.length
-      ? '<span class="k">backing off ' + a.recovery.blocked.join(', ') + '</span><br>' +
-        '<span class="g">' + a.recovery.recoveries + ' recoveries</span>'
-      : '<span class="g">' + a.recovery.recoveries + ' recoveries - nothing blocked</span>',
-      a.recovery.blocked.length > 0);
-
-  const d = a.troubleshooter || {};
-  const bad = d.cause && d.cause !== 'healthy';
-  set('troubleshooter', bad
-      ? '<span class="k">' + d.cause + '</span><br><span class="g">' + (d.detail || d.headline) + '</span>'
-      : '<span class="g">nothing is wrong</span>', bad);
-
-  set('explainer', '<span class="g">' + (a.explainer.text || '--') + '</span>', true);
-}
-
-function renderState(s){
-  const w = s.world || {};
-  S.position = w.position != null ? w.position : S.position;
-  S.zone = w.zone || S.zone;
-  S.nets = w.networks || S.nets;
-  S.edges = s.edges || S.edges;
-  S.agents = s.agents || S.agents;
-  S.activeEdge = s.active_edge || S.activeEdge;
-  S.activeNetwork = s.active_network || S.activeNetwork;
-  S.handoff = s.handoff_state || S.handoff;
-  S.e2e = s.live_e2e_ms != null ? s.live_e2e_ms : S.e2e;
-  S.mode = s.mode || S.mode;
-
-  el('t').textContent = (w.t || 0).toFixed(1) + 's';
-  el('e2e').textContent = S.e2e == null ? '-' : S.e2e.toFixed(0) + ' ms';
-  el('zone').textContent = S.zone;
-  if (S.agents.watcher) el('tick').textContent = 'every ' + S.agents.watcher.tick_ms + ' ms';
-
-  renderNetworks();
-  renderAgents();
-
-  const staging = ['PREPARING','TRANSFERRING','VERIFYING','COMMITTING'].indexOf(S.handoff) >= 0;
-  EDGE_ORDER.forEach(eid => {
-    const h = S.edges[eid] || {}, box = el('edge-'+eid);
-    box.classList.toggle('active', eid === S.activeEdge);
-    box.classList.toggle('target', staging && eid === S.targetEdge);
-    el('inf-'+eid).textContent  = h.expected_inference_ms ? h.expected_inference_ms.toFixed(0)+'ms' : '-';
-    el('cpuv-'+eid).textContent = h.cpu ? (h.cpu*100).toFixed(0)+'%' : '-';
-    el('ses-'+eid).textContent  = h.active_sessions == null ? 0 : h.active_sessions;
-    el('est-'+eid).textContent  = eid === S.activeEdge ? 'ACTIVE'
-      : (staging && eid === S.targetEdge) ? S.handoff : 'standby';
-  });
-
-  const idx = STEPS.indexOf(S.handoff);
-  STEPS.forEach((st, i) => {
-    const n = el('step-'+st);
-    n.classList.toggle('on', st === S.handoff);
-    n.classList.toggle('done', idx > 0 && i < idx);
-  });
-
-  if (s.explanation) el('why').textContent = s.explanation;
-  el('mf').textContent = s.frames_sent || 0;
-  el('ml').textContent = s.frames_lost || 0;
-  el('mh').textContent = s.handoffs || 0;
-  el('mr').textContent = s.reconnects || 0;
-}
-
-const spark = el('spark'), sctx = spark.getContext('2d');
-function drawSpark(){
-  const w = spark.width = Math.max(2, spark.clientWidth * 2), h = spark.height = 80;
-  sctx.clearRect(0,0,w,h);
-  if (S.hist.length < 2) return;
-  const max = Math.max.apply(null, [120].concat(S.hist));
-  sctx.beginPath();
-  S.hist.forEach((v,i) => {
-    const x = i/(S.hist.length-1)*w, y = h - (v/max)*h*.9 - 4;
-    i ? sctx.lineTo(x,y) : sctx.moveTo(x,y);
-  });
-  sctx.strokeStyle = '#ff6b00'; sctx.lineWidth = 2.5; sctx.stroke();
-  sctx.lineTo(w,h); sctx.lineTo(0,h); sctx.closePath();
-  sctx.fillStyle = 'rgba(255,107,0,.12)'; sctx.fill();
-}
-
-function log(text, hi){
-  const d = document.createElement('div');
-  d.className = 'ev' + (hi ? ' hi' : '');
-  d.innerHTML = '<b>' + el('t').textContent + '</b><span>' + text + '</span>';
-  el('log').prepend(d);
-  while (el('log').children.length > 40) el('log').lastChild.remove();
-}
-
-// ------------------------------------------------------------------ socket
-let ws = null;
-function connect(){
-  ws = new WebSocket('ws://' + location.host + '/ws');
-  ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch(err){} };
-  ws.onclose = () => setTimeout(connect, 1200);
-}
-const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
-
-function handle(evt){
-  switch(evt.kind){
-    case 'state': renderState(evt); break;
-    case 'frame':
-      if (evt.e2e_ms != null){ S.hist.push(evt.e2e_ms); if (S.hist.length > 220) S.hist.shift(); drawSpark(); }
-      break;
-    case 'run_begin':
-      S.running = true; S.hist = []; el('log').innerHTML = '';
-      log('run started - ' + evt.mode + ', ' + evt.duration_s + 's', true); break;
-    case 'run_end':
-      S.running = false;
-      log('run finished - p95 ' + evt.p95_ms + 'ms, zone gap ' + evt.zone_gap_ms +
-          'ms, ' + evt.frames_lost + ' lost', true);
-      break;
-    case 'handoff_begin':
-      S.targetEdge = evt.target_edge;
-      log('handoff ' + evt.source_edge + ' to ' + evt.target_edge + ' over ' +
-          evt.target_network + ' - ' + evt.reason, true);
-      break;
-    case 'handoff_complete':
-      S.targetEdge = null;
-      log('committed in ' + evt.total_ms + 'ms (prepare ' + evt.prepare_ms + ', state ' +
-          evt.state_ms + ', verify ' + evt.verify_ms + ', commit ' + evt.commit_ms + '), ' +
-          evt.state_bytes + 'B state');
-      break;
-    case 'handoff_failed': S.targetEdge = null; log('handoff FAILED: ' + evt.reason, true); break;
-    case 'recovery': log('recovery: ' + evt.action + ' - ' + evt.reason, true); break;
-    case 'quic_migration':
-      log('QUIC migrated ' + evt.from_network + ' to ' + evt.to_network +
-          ' - same connection, no handshake'); break;
-    case 'tcp_connection_lost': log('TCP connection lost on ' + evt.edge_id, true); break;
-    case 'tcp_reconnected':
-      log('TCP reconnected to ' + evt.edge_id + ' after ' + evt.outage_ms +
-          'ms - session rebuilt cold', true); break;
-    case 'handoff_state': if (evt.target_edge) S.targetEdge = evt.target_edge; break;
-    case 'explanation': el('why').textContent = evt.text; break;
-    case 'error': log(evt.message, true); break;
-  }
-}
-
-let mode = 'echo';
-document.querySelectorAll('#modes button').forEach(b => {
-  b.onclick = () => {
-    document.querySelectorAll('#modes button').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); mode = b.dataset.mode;
+  $("thSeg").onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    threshold = Number(b.dataset.t);
+    [...$("thSeg").children].forEach(x => x.classList.toggle("on", x === b));
+    $("dlLegend").textContent = `${threshold} ms deadline`;
+    renderComparison(); markDirty();
   };
-});
-el('start').onclick  = () => send({cmd:'start', mode:mode, duration:90, seed:7});
-el('stop').onclick   = () => send({cmd:'stop'});
-el('replay').onclick = () => send({cmd:'replay', mode:mode, speed:1});
-connect(); drawSpark();
+  window.addEventListener("resize", markDirty);
+  await Promise.all([refreshRuns(), refreshComparisons()]);
+  const st = await (await api("/api/status")).json();
+  connectLive();
+  if (st.busy && st.live_run) { source = "live"; followLive = true; V.runId = st.live_run.run_id; liveRunId = st.live_run.run_id; hideIntro(); }
+  refreshStatus();
+  markDirty();
+  requestAnimationFrame(frame); requestAnimationFrame(tickReplay);
+}
+init().catch(e => toast("Could not load: " + e.message));
 </script>
+<script type="module" src="/assets/mission.js?v=12"></script>
+<script type="module" src="/assets/prediction.js?v=2"></script>
 </body>
 </html>

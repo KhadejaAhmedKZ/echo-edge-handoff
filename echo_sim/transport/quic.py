@@ -23,8 +23,8 @@ import ssl
 from typing import Any, Dict, Optional
 
 from aioquic.asyncio import QuicConnectionProtocol
-from aioquic.asyncio.client import connect
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import QuicConnection
 from aioquic.quic.events import ConnectionTerminated, QuicEvent, StreamDataReceived
 
 from .. import protocol as P
@@ -34,21 +34,70 @@ ALPN = ["echo/1"]
 LOOPBACK = "127.0.0.1"
 
 
-def _dual_stack_socket(port: int) -> socket.socket:
-    """A dual-stack UDP socket bound to `port`, matching how aioquic dials out.
-
-    aioquic binds AF_INET6 with V6ONLY off and addresses the server as an
-    IPv4-mapped address, so any socket we substitute during migration has to be
-    built the same way or the mapped address will not fit it.
-    """
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+def _ipv6_available() -> bool:
     try:
-        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-        sock.bind(("::", port, 0, 0))
+        socket.socket(socket.AF_INET6, socket.SOCK_DGRAM).close()
+        return True
+    except OSError:
+        return False
+
+
+# aioquic's own connect() insists on an IPv6 dual-stack socket, which fails on
+# hosts without IPv6 (some containers and VMs). We dial ourselves and use the
+# same family for the initial socket and for every socket used in migration.
+USE_IPV6 = _ipv6_available()
+
+
+def _dual_stack_socket(port: int) -> socket.socket:
+    """A UDP socket bound to `port`, of the family this host supports.
+
+    With IPv6 it is dual-stack (V6ONLY off) and the server is addressed as an
+    IPv4-mapped address, exactly as aioquic does. Without IPv6 it is plain IPv4
+    on loopback. Migration sockets are built the same way, so the server
+    address always fits them.
+    """
+    if USE_IPV6:
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            sock.bind(("::", port, 0, 0))
+        except OSError:
+            sock.close()
+            raise
+        return sock
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind((LOOPBACK, port))
     except OSError:
         sock.close()
         raise
     return sock
+
+
+def _server_addr(port: int) -> tuple:
+    return ("::ffff:" + LOOPBACK, port, 0, 0) if USE_IPV6 else (LOOPBACK, port)
+
+
+@contextlib.asynccontextmanager
+async def connect(host: str, port: int, *, configuration: QuicConfiguration,
+                  create_protocol, local_port: int, wait_connected: bool = True):
+    """Minimal equivalent of aioquic.asyncio.client.connect for loopback use."""
+    loop = asyncio.get_running_loop()
+    if configuration.server_name is None:
+        configuration.server_name = host
+    connection = QuicConnection(configuration=configuration)
+    sock = _dual_stack_socket(local_port)
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: create_protocol(connection), sock=sock)
+    try:
+        protocol.connect(_server_addr(port), transmit=wait_connected)
+        if wait_connected:
+            await protocol.wait_connected()
+        yield protocol
+    finally:
+        protocol.close()
+        await protocol.wait_closed()
+        transport.close()
 
 
 def pick_local_port(network_id: str) -> int:
@@ -208,6 +257,7 @@ class QuicTransport:
         self.standby: Optional[EchoConnection] = None
         self.telemetry = telemetry
         self.migrations = 0
+        self.draining: Optional[EchoConnection] = None
 
     @property
     def edge_id(self) -> Optional[str]:
@@ -233,8 +283,9 @@ class QuicTransport:
         await self.primary.migrate(network_id)
         self.migrations += 1
         if self.telemetry:
-            self.telemetry.emit("quic_migration", from_network=old,
-                                to_network=network_id, edge_id=self.primary.edge_id)
+            self.telemetry.emit("path_migrated", "transport", from_network=old,
+                                to_network=network_id, server=self.primary.edge_id,
+                                same_connection=True)
         return True
 
     async def open_standby(self, edge_id: str, network_id: str) -> bool:
@@ -258,17 +309,37 @@ class QuicTransport:
         old = self.primary
         self.primary = self.standby
         self.standby = None
-        if old is not None:
-            asyncio.ensure_future(_close_later(old))
+        self.draining = old
 
     async def close_standby(self) -> None:
         if self.standby is not None:
             await self.standby.close()
             self.standby = None
 
-    async def drain(self, edge_id: str, session_id: str) -> None:
-        """Best effort: the old path may already be gone, and that is fine."""
-        return None
+    async def drain(self, edge_id: str, session_id: str,
+                    finish_up_to: Optional[int] = None) -> None:
+        """Tell the old server to finish outstanding requests and take no more.
+
+        Best effort and non-blocking: the old path may already be gone, and
+        the handoff must not wait on it. The old connection stays open long
+        enough for outstanding results to arrive, then closes.
+        """
+        old, self.draining = self.draining, None
+        if old is None:
+            return
+
+        async def _finish() -> None:
+            reply = await old.request(
+                P.message(P.ECHO_DRAIN, session_id=session_id,
+                          finish_up_to=finish_up_to), timeout=1.0)
+            if self.telemetry is not None:
+                self.telemetry.emit(
+                    "server_event", "transport", event="drain_acknowledged"
+                    if reply is not None else "drain_unacknowledged",
+                    server=edge_id, session_id=session_id)
+            await _close_later(old, 1.0)
+
+        asyncio.ensure_future(_finish())
 
     async def close(self) -> None:
         await self.close_standby()

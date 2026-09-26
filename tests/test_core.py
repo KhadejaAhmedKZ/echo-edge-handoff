@@ -188,7 +188,7 @@ def test_hysteresis_blocks_a_marginal_switch():
     best = engine.best()
     current, challenger, reason = engine.evaluate(best.network_id, best.edge_id)
     assert challenger is None
-    assert "best pair" in reason
+    assert "best server" in reason
 
 
 def test_a_dead_path_switches_immediately_without_waiting_for_patience():
@@ -258,12 +258,13 @@ def test_orchestrator_refuses_a_second_move_while_one_is_in_flight():
 
 def test_orchestrator_respects_recovery_backoff():
     from echo_sim.agents.orchestrator import HOLD
+    from echo_sim.agents.orchestrator import HANDOFF
     orch, engine, recovery = _orchestrator(0.95)
     best = engine.best()
     recovery.block(best.edge_id, 30.0)
     action, _ = orch.plan("wifi", "A")
-    assert action.kind == HOLD
-    assert action.veto.startswith("blocked:")
+    # Never hand the session to a server that just failed us.
+    assert not (action.kind == HANDOFF and action.target.edge_id == best.edge_id)
 
 
 def test_orchestrator_cooldown_does_not_strand_a_dead_path():
@@ -274,7 +275,16 @@ def test_orchestrator_cooldown_does_not_strand_a_dead_path():
     assert orch.cooldown_left_s > 0
     action, current = orch.plan("wifi", "A")    # wifi has no coverage here
     assert not current.reachable
-    assert action.kind == HANDOFF
+    assert action.is_move
+
+
+def test_dead_network_first_moves_the_connection_not_the_session():
+    """Cheapest action when the path dies: QUIC migration to the same server."""
+    from echo_sim.agents.orchestrator import MIGRATE_PATH
+    orch, _, _ = _orchestrator(0.95)
+    action, current = orch.plan("wifi", "A")
+    assert action.kind == MIGRATE_PATH
+    assert action.target.edge_id == "A" and action.target.network_id != "wifi"
 
 
 def test_orchestrator_prefers_a_path_migration_over_moving_compute():
