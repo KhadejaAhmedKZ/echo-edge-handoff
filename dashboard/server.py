@@ -13,12 +13,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import replace
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -546,6 +548,67 @@ ADDITIONAL_EXPERIMENTS = [
     {"name": "Satellite visibility dashboard", "folder": "06_satellite-dashboard",
      "evidence": "Orbital tracking and visibility; not connected to this mission."},
 ]
+
+
+# ---------------------------------------------------------------------------
+# Optional: launch the separate Wi-Fi switch prototype on this machine.
+#
+# A web page cannot run a program on a visitor's computer, and should not be
+# able to. This only exists for the machine the dashboard is running on, and
+# it is off unless you start with ECHO_ALLOW_LAUNCH=1.
+#
+# Three things keep it narrow: the command is fixed and takes no argument from
+# the request, the server listens only on 127.0.0.1, and the POST requires a
+# custom header, which a page on another site cannot send cross-origin without
+# a CORS preflight this server never answers.
+# ---------------------------------------------------------------------------
+
+LAUNCH_ENABLED = os.environ.get("ECHO_ALLOW_LAUNCH") == "1"
+PROJECT_ROOT = os.path.dirname(HERE)
+
+
+def _wifi_switch_app() -> Optional[str]:
+    """The working copy beside this project, else the copy vendored here."""
+    for candidate in (
+        os.path.join(os.path.dirname(PROJECT_ROOT), "04_wifi-switch", "app.py"),
+        os.path.join(PROJECT_ROOT, "extras", "wifi-switch", "app.py"),
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+@app.get("/api/extras/wifi-switch")
+async def wifi_switch_status() -> JSONResponse:
+    path = _wifi_switch_app()
+    return JSONResponse({
+        "enabled": LAUNCH_ENABLED,
+        "found": path is not None,
+        "path": os.path.relpath(path, PROJECT_ROOT) if path else None,
+        "reason": None if LAUNCH_ENABLED else
+        "Launching is off. Restart with ECHO_ALLOW_LAUNCH=1 ./start_mission.sh",
+    })
+
+
+@app.post("/api/extras/wifi-switch/launch")
+async def wifi_switch_launch(request: Request) -> JSONResponse:
+    if not LAUNCH_ENABLED:
+        raise HTTPException(403, "Launching is off. Restart with "
+                                 "ECHO_ALLOW_LAUNCH=1 ./start_mission.sh")
+    if request.headers.get("x-echo-launch") != "1":
+        raise HTTPException(403, "Missing X-ECHO-Launch header.")
+    path = _wifi_switch_app()
+    if path is None:
+        raise HTTPException(404, "The Wi-Fi switch prototype was not found "
+                                 "beside this project or under extras/.")
+    # The prototype is a Tkinter desktop app, so it opens its own window. Use
+    # the interpreter its own run script uses; stdio is inherited so a failure
+    # (a Python without Tkinter, say) is visible in this terminal.
+    python = shutil.which("python3") or sys.executable
+    proc = subprocess.Popen([python, os.path.basename(path)],
+                            cwd=os.path.dirname(path))
+    return JSONResponse({"launched": True, "pid": proc.pid,
+                         "path": os.path.relpath(path, PROJECT_ROOT)})
 
 
 def main() -> None:
