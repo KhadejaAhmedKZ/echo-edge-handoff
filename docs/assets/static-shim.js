@@ -271,45 +271,54 @@
     return M.full_runs && M.full_runs[0] || null;
   }
 
-  function rewire() {
-    if (typeof window.replay !== "function") return false;
+  function play() {
+    var scen = document.getElementById("selScenario");
+    var mode = document.getElementById("selMode");
+    var rid = pickFor(scen ? scen.value : "", mode ? mode.value : "");
+    if (rid && typeof window.replay === "function") window.replay(rid);
+    else alert("No recorded run for that combination in this build.");
+  }
+
+  // Capture phase, so neither the page's own init() (which assigns onclick
+  // after this script runs) nor its status poll (which resets .disabled) can
+  // undo any of this.
+  document.addEventListener("click", function (e) {
+    var el = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!el) return;
+    if (el.id === "btnStart" || el.id === "btnIntroLive") {
+      e.preventDefault(); e.stopImmediatePropagation();
+      play();
+    } else if (el.id === "btnCompare") {
+      e.preventDefault(); e.stopImmediatePropagation();
+      alert("Running four controllers means computing four new runs, which "
+          + "needs the backend. The finished four-controller comparisons are "
+          + "in the comparison panel further down this page.");
+    }
+  }, true);
+
+  function relabel() {
     var start = document.getElementById("btnStart");
     var introLive = document.getElementById("btnIntroLive");
     var compare = document.getElementById("btnCompare");
-    var scen = document.getElementById("selScenario");
-    var mode = document.getElementById("selMode");
-    if (!start || !scen || !mode) return false;
-
-    function play() {
-      var rid = pickFor(scen.value, mode.value);
-      if (rid) window.replay(rid);
-      else alert("No recorded run for that combination in this build.");
+    if (start && start.textContent !== "Play this combination") {
+      start.textContent = "Play this combination";
+      start.title = "Plays the recorded run for the chosen scenario and "
+                  + "controller, with pause, scrub and speed. This page has no "
+                  + "backend, so no new run can be computed here.";
     }
-
-    start.textContent = "Play this combination";
-    start.title = "Plays the recorded run for the chosen scenario and controller, "
-                + "with pause, scrub and speed. This page has no backend, so no "
-                + "new run can be computed here.";
-    start.onclick = play;
-
-    if (introLive) {
+    if (introLive && introLive.textContent.indexOf("Play a recorded") !== 0) {
       introLive.textContent = "Play a recorded run (about 90 s)";
-      introLive.onclick = play;
     }
     if (compare) {
-      compare.disabled = true;
-      compare.title = "Running four controllers means computing four new runs, "
-                    + "which needs the backend. The finished comparisons are in "
-                    + "the comparison panel below.";
+      compare.style.opacity = "0.45";
+      compare.title = "Needs the backend. The finished comparisons are in the "
+                    + "comparison panel below.";
     }
-    return true;
   }
 
   manifest().then(function () {
-    var tries = 0;
-    var t = setInterval(function () {
-      if (rewire() || ++tries > 60) clearInterval(t);
-    }, 200);
+    relabel();
+    setInterval(relabel, 1000);   // the page rewrites these labels as it polls
   });
 
   manifest().catch(function (e) { console.warn("static shim:", e.message); });
