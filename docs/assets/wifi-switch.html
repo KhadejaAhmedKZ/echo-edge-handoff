@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wi-Fi switch prototype - source</title>
+<meta name="description" content="Python source of the ECHO Wi-Fi switch prototype: a real single-radio switch between two Wi-Fi networks.">
+<style>
+:root{--bg:#141414;--panel:#181818;--line:#333331;--line2:#4c4b47;
+  --text:#e8e5de;--muted:#aaa79f;--dim:#918e87;--accent:#e99a59;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:Arial,Helvetica,sans-serif;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:16px 34px 80px}
+header{padding:12px 0 20px;border-bottom:1px solid var(--line);
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+.brand b{font-size:25px;letter-spacing:.15em;font-weight:600}
+.brand small{display:block;font-size:10px;letter-spacing:.08em;color:var(--muted);margin-top:4px}
+.back{margin-left:auto;font-size:12px;color:var(--accent);text-decoration:none;
+  border:1px solid var(--line2);border-radius:3px;padding:8px 13px}
+.back:hover{background:#2b2a27;border-color:#77736b}
+h1{font-size:30px;font-weight:400;letter-spacing:-.02em;margin:26px 0 10px}
+.lede{font-size:13px;line-height:1.75;color:var(--muted);max-width:760px;margin:0 0 6px}
+.note{font-size:11px;line-height:1.7;color:var(--dim);max-width:760px;margin:14px 0 0}
+.index{display:flex;flex-wrap:wrap;gap:0 22px;padding:20px 0;margin:24px 0 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.index a{font:11px var(--mono);color:var(--muted);text-decoration:none}
+.index a:hover{color:var(--accent)}
+section{padding-top:44px;scroll-margin-top:12px}
+.fh{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding-bottom:12px}
+.fh h2{font:15px var(--mono);font-weight:400;margin:0;color:var(--text)}
+.fh span{font-size:11px;color:var(--dim)}
+.fh em{margin-left:auto;font-style:normal;font:10px var(--mono);color:var(--dim)}
+pre{margin:0;padding:18px 0 0;overflow-x:auto;font:12px/1.65 var(--mono);
+  color:var(--text);tab-size:4}
+pre .k{color:var(--accent)}
+pre .s{color:#b9cbb9}
+pre .c{color:var(--dim);font-style:italic}
+pre .f{color:#d4cfc3}
+pre .b{color:#a2aca7}
+pre .n{color:#e8b875}
+pre .d{color:#e8b875}
+footer{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);
+  font-size:11px;color:var(--dim)}
+@media(max-width:750px){.wrap{padding:10px 16px 50px}h1{font-size:24px}pre{font-size:11px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand"><b>ECHO</b><small>WI-FI SWITCH PROTOTYPE / 04</small></div>
+  <a class="back" href="index.html">&larr; Back to mission control</a>
+</header>
+
+<h1>Wi-Fi switch prototype</h1>
+<p class="lede">A separate, smaller experiment from the same project: a real
+single-radio switch between two Wi-Fi networks on macOS, Linux and Windows. It
+scans, joins, and verifies the join actually took, rather than assuming it did.
+Unlike the mission simulation, this one touches the real adapter - which is
+also why it is manual and kept apart from the mission.</p>
+<p class="note">Read-only source, generated from
+<code>04_wifi-switch/</code> at build time. Passwords are never written to the
+configuration: on macOS they go to the login keychain, and elsewhere they are
+held in memory for the run only. Nothing on this page executes.</p>
+
+<nav class="index"><a href="#readme-md">README.md</a><a href="#app-py">app.py</a><a href="#wifi-controller-py">wifi_controller.py</a><a href="#credentials-py">credentials.py</a><a href="#config-py">config.py</a><a href="#tests-test-wifi-logic-py">tests/test_wifi_logic.py</a><a href="#tests-test-config-py">tests/test_config.py</a><a href="#requirements-txt">requirements.txt</a></nav>
+
+<section id="readme-md"><div class="fh"><h2>README.md</h2><span>What it does and how to run it</span><em>169 lines</em></div><pre><code># Wi-Fi Switch
+
+A tiny desktop utility that switches a laptop between two configured Wi-Fi networks with one button.
+
+The app is deliberately simple:
+
+```text
+Current Wi-Fi
+     ↓
+ [ SWITCH ]
+     ↓
+Other configured Wi-Fi
+```
+
+It performs a real operating-system Wi-Fi connection rather than changing a fake UI state.
+
+## Supported systems
+
+- Windows
+- macOS
+
+Linux is intentionally not implemented in this first prototype.
+
+## Requirements
+
+- Python 3.11+ recommended
+- Tkinter
+- A laptop with Wi-Fi
+- The two target Wi-Fi networks should already be saved/known to the operating system, or otherwise be available for connection through the OS.
+
+No runtime third-party package is required.
+
+## Run
+
+From this folder:
+
+```bash
+python app.py
+```
+
+On some systems you may need:
+
+```bash
+python3 app.py
+```
+
+## Configure
+
+Open **Settings** and enter:
+
+- Network 1: the Wi-Fi SSID/profile name, plus an optional password
+- Network 2: the Wi-Fi SSID/profile name, plus an optional password
+
+The JSON configuration holds only the two names. Passwords are optional and are stored separately:
+
+- **macOS**: in the login keychain, under the service `wifi-switch` (one item per SSID).
+- **Elsewhere**: in memory for the current run only. Windows joins a saved profile and takes no
+  password at all.
+
+Filling them in ahead of time is worth doing if a network keeps refusing the join: the app then
+supplies the password with the join instead of interrupting the switch to ask for it. Leave a
+password field blank to keep whatever is already stored; **Forget passwords** removes them.
+
+If a switch is refused and no password is stored, the app asks once and then saves the answer, so
+the same switch is not interrupted twice.
+
+One caveat: `networksetup` only accepts a password as a command-line argument, so it is briefly
+visible to `ps` on a shared machine while the join runs.
+
+## Switch
+
+If currently connected to Network 1, pressing **SWITCH** connects to Network 2.
+
+If currently connected to Network 2, pressing **SWITCH** connects to Network 1.
+
+If currently connected to neither configured network, pressing **SWITCH** attempts to connect to Network 1.
+
+If the machine is already on the target network, **SWITCH** does nothing instead of dropping and
+rejoining the same network.
+
+The app re-reads the live SSID at the moment you press **SWITCH** (never a cached value), then waits
+up to 60 seconds for the connected SSID to actually match the target before reporting success.
+
+## Windows
+
+The Windows implementation uses `netsh wlan`.
+
+It detects the active SSID with:
+
+```text
+netsh wlan show interfaces
+```
+
+and connects to a saved Wi-Fi profile with:
+
+```text
+netsh wlan connect name=&quot;PROFILE_NAME&quot;
+```
+
+The profile must already exist in Windows for the simple prototype to connect without separately creating a Wi-Fi profile.
+
+## macOS
+
+The macOS implementation uses `networksetup` to join, but **not** to read the current SSID.
+
+Two macOS behaviours matter here:
+
+- `networksetup -getairportnetwork en0` answers *&quot;You are not associated with an AirPort network&quot;*
+  even while the machine is connected. Trusting it makes the app believe it is offline, so it
+  &quot;switches&quot; to Network 1 — the network it is already on. The SSID is therefore read from:
+
+  ```text
+  system_profiler -json SPAirPortDataType
+  ```
+
+  (`-detailLevel mini` omits the SSID, so the full level is required; a read takes a few seconds,
+  which is why all reads run off the UI thread.)
+
+- `networksetup -setairportnetwork` **exits 0 even when the join fails**, printing `Failed to join
+  network X` or `Could not find network X` instead. The app classifies that output rather than the
+  exit code.
+
+Joining the SSID you are already associated with is what produces `Error: -3900 ... tmpErr`, so the
+app never issues a join for the active network. macOS also reports `-3900` on joins that *do* land,
+because it answers before the association settles — so between retries the app re-checks the live
+SSID and stops as soon as the target is up. Retrying blindly would re-join the network it had just
+joined and tear the fresh connection straight back down.
+
+Settings offers the machine&#x27;s known networks from:
+
+```text
+networksetup -listpreferredwirelessnetworks &lt;interface&gt;
+```
+
+## Tests
+
+Install pytest:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Run tests:
+
+```bash
+python -m pytest -q
+```
+
+The unit tests do not change the real Wi-Fi connection. The credential tests write and delete a
+throwaway `wifi-switch-unit-test` keychain item and leave your real passwords untouched.
+
+## Limitations
+
+- This is a manual two-network switch, not an autonomous network manager.
+- It does not predict network quality.
+- It does not manage cellular, 5G, satellite, Ethernet, VPN, QUIC, or edge-compute sessions.
+- It has one radio, so a switch is a real outage: the link drops and DHCP has to run again.
+- Actual Wi-Fi switching depends on the operating system, adapter, permissions, saved profiles, and network availability.
+
+## Relationship to ECHO
+
+This prototype takes only the simple same-type handoff idea:
+
+```text
+Wi-Fi A → Wi-Fi B
+```
+
+It intentionally does not implement ECHO&#x27;s larger watcher/predictor/agent/recovery architecture.
+</code></pre></section><section id="app-py"><div class="fh"><h2>app.py</h2><span>The interface and the switch flow</span><em>451 lines</em></div><pre><code><span class="k">import</span> tkinter <span class="k">as</span> tk
+<span class="k">from</span> tkinter <span class="k">import</span> ttk, messagebox, simpledialog
+<span class="k">import</span> queue
+<span class="k">import</span> threading
+<span class="k">import</span> time
+
+<span class="k">import</span> credentials
+<span class="k">from</span> config <span class="k">import</span> load_config, save_config, clear_config
+<span class="k">from</span> wifi_controller <span class="k">import</span> (
+    JoinRefused,
+    choose_target,
+    create_wifi_controller,
+)
+
+<span class="c"># Reading the associated SSID goes through system_profiler, which takes a few</span>
+<span class="c"># seconds, so every read happens off the UI thread.</span>
+AUTO_REFRESH_MS = <span class="n">20000</span>
+UI_QUEUE_MS = <span class="n">100</span>
+VERIFY_TIMEOUT_S = <span class="n">60</span>
+VERIFY_INTERVAL_S = <span class="n">2</span>
+
+
+<span class="k">class</span> <span class="f">WifiSwitchApp</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="b">self</span>, root):
+        <span class="b">self</span>.root = root
+        <span class="b">self</span>.root.title(<span class="s">&quot;Wi-Fi Switch&quot;</span>)
+        <span class="b">self</span>.root.geometry(<span class="s">&quot;460x520&quot;</span>)
+        <span class="b">self</span>.root.minsize(<span class="n">420</span>, <span class="n">480</span>)
+
+        <span class="b">self</span>.config = load_config()
+        <span class="b">self</span>.controller = create_wifi_controller()
+        <span class="b">self</span>.switching = <span class="k">False</span>
+        <span class="b">self</span>.refreshing = <span class="k">False</span>
+        <span class="b">self</span>.current_network = <span class="k">None</span>
+
+        <span class="b">self</span>.current_var = tk.StringVar(value=<span class="s">&quot;Detecting…&quot;</span>)
+        <span class="b">self</span>.current_note_var = tk.StringVar(value=<span class="s">&quot;&quot;</span>)
+        <span class="b">self</span>.target_var = tk.StringVar(value=<span class="s">&quot;—&quot;</span>)
+        <span class="b">self</span>.status_var = tk.StringVar(value=<span class="s">&quot;Ready&quot;</span>)
+
+        <span class="b">self</span>.ui_queue = queue.Queue()
+
+        <span class="b">self</span>._build_ui()
+        <span class="b">self</span>.root.after(UI_QUEUE_MS, <span class="b">self</span>._drain_ui_queue)
+        <span class="b">self</span>.refresh_state()
+        <span class="b">self</span>.root.after(AUTO_REFRESH_MS, <span class="b">self</span>._auto_refresh)
+
+    <span class="k">def</span> <span class="f">_build_ui</span>(<span class="b">self</span>):
+        outer = ttk.Frame(<span class="b">self</span>.root, padding=<span class="n">28</span>)
+        outer.pack(fill=<span class="s">&quot;both&quot;</span>, expand=<span class="k">True</span>)
+
+        ttk.Label(
+            outer, text=<span class="s">&quot;Wi-Fi Switch&quot;</span>, font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">22</span>, <span class="s">&quot;bold&quot;</span>)
+        ).pack(pady=(<span class="n">0</span>, <span class="n">30</span>))
+
+        ttk.Label(
+            outer, text=<span class="s">&quot;Current Wi-Fi&quot;</span>, font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">10</span>)
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>)
+        ttk.Label(
+            outer, textvariable=<span class="b">self</span>.current_var,
+            font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">17</span>, <span class="s">&quot;bold&quot;</span>)
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">4</span>, <span class="n">2</span>))
+
+        ttk.Label(
+            outer, textvariable=<span class="b">self</span>.current_note_var, foreground=<span class="s">&quot;#666666&quot;</span>
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>)
+
+        ttk.Label(outer, text=<span class="s">&quot;↓&quot;</span>, font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">24</span>)).pack(pady=<span class="n">18</span>)
+
+        <span class="b">self</span>.switch_button = ttk.Button(
+            outer, text=<span class="s">&quot;SWITCH&quot;</span>, command=<span class="b">self</span>.switch_network
+        )
+        <span class="b">self</span>.switch_button.pack(ipadx=<span class="n">45</span>, ipady=<span class="n">14</span>, pady=<span class="n">4</span>)
+
+        ttk.Label(outer, text=<span class="s">&quot;&quot;</span>).pack(pady=<span class="n">3</span>)
+
+        ttk.Label(
+            outer, text=<span class="s">&quot;Target Wi-Fi&quot;</span>, font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">10</span>)
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>)
+        ttk.Label(
+            outer, textvariable=<span class="b">self</span>.target_var,
+            font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">17</span>, <span class="s">&quot;bold&quot;</span>)
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">4</span>, <span class="n">18</span>))
+
+        status_frame = ttk.LabelFrame(outer, text=<span class="s">&quot;Status&quot;</span>, padding=<span class="n">12</span>)
+        status_frame.pack(fill=<span class="s">&quot;x&quot;</span>, pady=(<span class="n">8</span>, <span class="n">20</span>))
+        ttk.Label(
+            status_frame, textvariable=<span class="b">self</span>.status_var,
+            wraplength=<span class="n">360</span>
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>)
+
+        bottom = ttk.Frame(outer)
+        bottom.pack(fill=<span class="s">&quot;x&quot;</span>, side=<span class="s">&quot;bottom&quot;</span>)
+
+        ttk.Button(bottom, text=<span class="s">&quot;Settings&quot;</span>, command=<span class="b">self</span>.open_settings).pack(
+            side=<span class="s">&quot;left&quot;</span>
+        )
+        <span class="b">self</span>.refresh_button = ttk.Button(
+            bottom, text=<span class="s">&quot;Refresh&quot;</span>, command=<span class="b">self</span>.refresh_state
+        )
+        <span class="b">self</span>.refresh_button.pack(side=<span class="s">&quot;right&quot;</span>)
+
+    <span class="c"># ------------------------------------------------------------------</span>
+    <span class="c"># Thread plumbing</span>
+    <span class="c"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="f">_post</span>(<span class="b">self</span>, func, *args):
+        <span class="s">&quot;&quot;&quot;Schedule `func` on the UI thread from any thread.
+
+        Tk calls are only safe from the thread running mainloop, so worker
+        threads hand work over through this queue instead of calling
+        root.after() themselves.
+        &quot;&quot;&quot;</span>
+        <span class="b">self</span>.ui_queue.put((func, args))
+
+    <span class="k">def</span> <span class="f">_drain_ui_queue</span>(<span class="b">self</span>):
+        <span class="k">while</span> <span class="k">True</span>:
+            <span class="k">try</span>:
+                func, args = <span class="b">self</span>.ui_queue.get_nowait()
+            <span class="k">except</span> queue.Empty:
+                <span class="k">break</span>
+            <span class="k">try</span>:
+                func(*args)
+            <span class="k">except</span> tk.TclError:
+                <span class="k">return</span>
+        <span class="b">self</span>.root.after(UI_QUEUE_MS, <span class="b">self</span>._drain_ui_queue)
+
+    <span class="c"># ------------------------------------------------------------------</span>
+    <span class="c"># State</span>
+    <span class="c"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="f">_auto_refresh</span>(<span class="b">self</span>):
+        <span class="k">if</span> <span class="k">not</span> <span class="b">self</span>.switching <span class="k">and</span> <span class="k">not</span> <span class="b">self</span>.refreshing:
+            <span class="b">self</span>.refresh_state(quiet=<span class="k">True</span>)
+        <span class="b">self</span>.root.after(AUTO_REFRESH_MS, <span class="b">self</span>._auto_refresh)
+
+    <span class="k">def</span> <span class="f">refresh_state</span>(<span class="b">self</span>, quiet=<span class="k">False</span>):
+        <span class="k">if</span> <span class="b">self</span>.switching <span class="k">or</span> <span class="b">self</span>.refreshing:
+            <span class="k">return</span>
+
+        <span class="b">self</span>.refreshing = <span class="k">True</span>
+        <span class="b">self</span>.refresh_button.state([<span class="s">&quot;disabled&quot;</span>])
+        <span class="k">if</span> <span class="k">not</span> quiet:
+            <span class="b">self</span>.status_var.<span class="b">set</span>(<span class="s">&quot;Reading current Wi-Fi…&quot;</span>)
+
+        threading.Thread(target=<span class="b">self</span>._refresh_worker, daemon=<span class="k">True</span>).start()
+
+    <span class="k">def</span> <span class="f">_refresh_worker</span>(<span class="b">self</span>):
+        <span class="k">try</span>:
+            current = <span class="b">self</span>.controller.get_current_network()
+            error = <span class="k">None</span>
+        <span class="k">except</span> Exception <span class="k">as</span> exc:
+            current, error = <span class="k">None</span>, <span class="b">str</span>(exc)
+        <span class="b">self</span>._post(<span class="b">self</span>._apply_state, current, error)
+
+    <span class="k">def</span> <span class="f">_apply_state</span>(<span class="b">self</span>, current, error):
+        <span class="b">self</span>.refreshing = <span class="k">False</span>
+        <span class="b">self</span>.refresh_button.state([<span class="s">&quot;!disabled&quot;</span>])
+        <span class="b">self</span>.current_network = current
+
+        <span class="k">if</span> error:
+            <span class="b">self</span>.current_var.<span class="b">set</span>(<span class="s">&quot;Unavailable&quot;</span>)
+            <span class="b">self</span>.current_note_var.<span class="b">set</span>(<span class="s">&quot;&quot;</span>)
+            <span class="b">self</span>.target_var.<span class="b">set</span>(<span class="s">&quot;—&quot;</span>)
+            <span class="b">self</span>.status_var.<span class="b">set</span>(f<span class="s">&quot;Wi-Fi detection error: {error}&quot;</span>)
+            <span class="k">return</span>
+
+        <span class="b">self</span>.current_var.<span class="b">set</span>(current <span class="k">or</span> <span class="s">&quot;No Wi-Fi connection&quot;</span>)
+        <span class="b">self</span>.current_note_var.<span class="b">set</span>(<span class="s">&quot;Connected&quot;</span> <span class="k">if</span> current <span class="k">else</span> <span class="s">&quot;Not associated&quot;</span>)
+
+        n1 = <span class="b">self</span>.config.get(<span class="s">&quot;network1&quot;</span>)
+        n2 = <span class="b">self</span>.config.get(<span class="s">&quot;network2&quot;</span>)
+
+        <span class="k">if</span> <span class="k">not</span> n1 <span class="k">or</span> <span class="k">not</span> n2:
+            <span class="b">self</span>.target_var.<span class="b">set</span>(<span class="s">&quot;Configure two networks&quot;</span>)
+            <span class="b">self</span>.status_var.<span class="b">set</span>(<span class="s">&quot;Set up Network 1 and Network 2 in Settings.&quot;</span>)
+            <span class="k">return</span>
+
+        target = choose_target(current, n1, n2)
+        <span class="b">self</span>.target_var.<span class="b">set</span>(target)
+
+        <span class="k">if</span> <span class="k">not</span> <span class="b">self</span>.switching <span class="k">and</span> <span class="b">self</span>.status_var.get() <span class="k">in</span> (
+            <span class="s">&quot;Reading current Wi-Fi…&quot;</span>, <span class="s">&quot;Ready&quot;</span>
+        ):
+            <span class="b">self</span>.status_var.<span class="b">set</span>(<span class="s">&quot;Ready&quot;</span>)
+
+    <span class="c"># ------------------------------------------------------------------</span>
+    <span class="c"># Switching</span>
+    <span class="c"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="f">switch_network</span>(<span class="b">self</span>):
+        <span class="k">if</span> <span class="b">self</span>.switching <span class="k">or</span> <span class="b">self</span>.refreshing:
+            <span class="k">return</span>
+
+        n1 = <span class="b">self</span>.config.get(<span class="s">&quot;network1&quot;</span>)
+        n2 = <span class="b">self</span>.config.get(<span class="s">&quot;network2&quot;</span>)
+
+        <span class="k">if</span> <span class="k">not</span> n1 <span class="k">or</span> <span class="k">not</span> n2:
+            messagebox.showinfo(
+                <span class="s">&quot;Setup required&quot;</span>,
+                <span class="s">&quot;Configure Network 1 and Network 2 before switching.&quot;</span>
+            )
+            <span class="b">self</span>.open_settings()
+            <span class="k">return</span>
+
+        <span class="b">self</span>.switching = <span class="k">True</span>
+        <span class="b">self</span>.switch_button.state([<span class="s">&quot;disabled&quot;</span>])
+        <span class="b">self</span>.refresh_button.state([<span class="s">&quot;disabled&quot;</span>])
+        <span class="b">self</span>.status_var.<span class="b">set</span>(<span class="s">&quot;Checking current Wi-Fi…&quot;</span>)
+
+        threading.Thread(
+            target=<span class="b">self</span>._switch_worker,
+            args=(n1, n2),
+            daemon=<span class="k">True</span>
+        ).start()
+
+    <span class="k">def</span> <span class="f">_switch_worker</span>(<span class="b">self</span>, n1, n2):
+        <span class="k">try</span>:
+            <span class="c"># Always re-read the live SSID: the switch direction depends on it,</span>
+            <span class="c"># and a stale value is what makes the app leave a network only to</span>
+            <span class="c"># rejoin the same one.</span>
+            current = <span class="b">self</span>.controller.get_current_network()
+            target = choose_target(current, n1, n2)
+
+            <span class="k">if</span> current == target:
+                <span class="b">self</span>._post(
+                    <span class="b">self</span>._switch_done,
+                    f<span class="s">&quot;Already connected to {target} — nothing to switch.&quot;</span>,
+                )
+                <span class="k">return</span>
+
+            stored = credentials.get_password(target)
+            <span class="b">self</span>._ui_status(
+                f<span class="s">&quot;Connecting to {target}…&quot;</span>
+                + (<span class="s">&quot; (using saved password)&quot;</span> <span class="k">if</span> stored <span class="k">else</span> <span class="s">&quot;&quot;</span>)
+            )
+            <span class="k">try</span>:
+                <span class="b">self</span>.controller.connect(target, password=stored)
+            <span class="k">except</span> JoinRefused <span class="k">as</span> exc:
+                password = <span class="b">self</span>._ask_password(target, <span class="b">str</span>(exc))
+                <span class="k">if</span> <span class="k">not</span> password:
+                    <span class="k">raise</span>
+                <span class="b">self</span>._ui_status(f<span class="s">&quot;Retrying {target} with password…&quot;</span>)
+                <span class="b">self</span>.controller.connect(target, password=password)
+                <span class="c"># Remember it so the next switch never has to interrupt.</span>
+                credentials.set_password(target, password)
+
+            <span class="b">self</span>._ui_status(f<span class="s">&quot;Waiting for {target} to come up…&quot;</span>)
+            deadline = time.time() + VERIFY_TIMEOUT_S
+            <span class="k">while</span> time.time() &lt; deadline:
+                <span class="k">if</span> <span class="b">self</span>.controller.get_current_network() == target:
+                    <span class="b">self</span>._post(<span class="b">self</span>._switch_done, f<span class="s">&quot;Connected to {target}&quot;</span>)
+                    <span class="k">return</span>
+                time.sleep(VERIFY_INTERVAL_S)
+
+            <span class="b">self</span>._post(
+                <span class="b">self</span>._switch_done,
+                f<span class="s">&quot;Timed out waiting for {target} to associate.&quot;</span>,
+            )
+        <span class="k">except</span> Exception <span class="k">as</span> exc:
+            <span class="b">self</span>._post(<span class="b">self</span>._switch_done, f<span class="s">&quot;Failed: {exc}&quot;</span>)
+
+    <span class="k">def</span> <span class="f">_ui_status</span>(<span class="b">self</span>, message):
+        <span class="b">self</span>._post(<span class="b">self</span>.status_var.<span class="b">set</span>, message)
+
+    <span class="k">def</span> <span class="f">_ask_password</span>(<span class="b">self</span>, ssid, reason):
+        <span class="s">&quot;&quot;&quot;Prompt on the UI thread and block the worker until it is answered.
+
+        The password is passed straight to the OS join command and is never
+        written to the configuration file.
+        &quot;&quot;&quot;</span>
+        result = {}
+        done = threading.Event()
+
+        <span class="k">def</span> <span class="f">prompt</span>():
+            <span class="k">try</span>:
+                result[<span class="s">&quot;value&quot;</span>] = simpledialog.askstring(
+                    <span class="s">&quot;Wi-Fi password&quot;</span>,
+                    f<span class="s">&quot;macOS refused the join to &#x27;{ssid}&#x27;.\n&quot;</span>
+                    f<span class="s">&quot;{reason}\n\n&quot;</span>
+                    <span class="s">&quot;Enter the password to retry (not saved):&quot;</span>,
+                    show=<span class="s">&quot;*&quot;</span>,
+                    parent=<span class="b">self</span>.root,
+                )
+            <span class="k">finally</span>:
+                done.<span class="b">set</span>()
+
+        <span class="b">self</span>._post(prompt)
+        done.wait(timeout=<span class="n">180</span>)
+        <span class="k">return</span> result.get(<span class="s">&quot;value&quot;</span>)
+
+    <span class="k">def</span> <span class="f">_switch_done</span>(<span class="b">self</span>, message):
+        <span class="b">self</span>.switching = <span class="k">False</span>
+        <span class="b">self</span>.switch_button.state([<span class="s">&quot;!disabled&quot;</span>])
+        <span class="b">self</span>.refresh_button.state([<span class="s">&quot;!disabled&quot;</span>])
+        <span class="b">self</span>.status_var.<span class="b">set</span>(message)
+        <span class="b">self</span>.refresh_state(quiet=<span class="k">True</span>)
+
+    <span class="c"># ------------------------------------------------------------------</span>
+    <span class="c"># Settings</span>
+    <span class="c"># ------------------------------------------------------------------</span>
+
+    <span class="d">@staticmethod</span>
+    <span class="k">def</span> <span class="f">_password_hint</span>(ssid):
+        <span class="k">if</span> ssid <span class="k">and</span> credentials.has_password(ssid):
+            <span class="k">return</span> f<span class="s">&quot;Password saved for &#x27;{ssid}&#x27; — type here only to replace it.&quot;</span>
+        <span class="k">return</span> <span class="s">&quot;Password (optional) — leave blank to let macOS use its own.&quot;</span>
+
+    <span class="k">def</span> <span class="f">open_settings</span>(<span class="b">self</span>):
+        win = tk.Toplevel(<span class="b">self</span>.root)
+        win.title(<span class="s">&quot;Wi-Fi Switch Settings&quot;</span>)
+        win.geometry(<span class="s">&quot;470x480&quot;</span>)
+        win.resizable(<span class="k">False</span>, <span class="k">False</span>)
+
+        frame = ttk.Frame(win, padding=<span class="n">24</span>)
+        frame.pack(fill=<span class="s">&quot;both&quot;</span>, expand=<span class="k">True</span>)
+
+        ttk.Label(
+            frame, text=<span class="s">&quot;Configure two Wi-Fi networks&quot;</span>,
+            font=(<span class="s">&quot;TkDefaultFont&quot;</span>, <span class="n">15</span>, <span class="s">&quot;bold&quot;</span>)
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">0</span>, <span class="n">20</span>))
+
+        <span class="k">try</span>:
+            known = <span class="b">self</span>.controller.get_saved_networks()
+        <span class="k">except</span> Exception:
+            known = []
+
+        saved_n1 = <span class="b">self</span>.config.get(<span class="s">&quot;network1&quot;</span>, <span class="s">&quot;&quot;</span>)
+        saved_n2 = <span class="b">self</span>.config.get(<span class="s">&quot;network2&quot;</span>, <span class="s">&quot;&quot;</span>)
+
+        ttk.Label(frame, text=<span class="s">&quot;Network 1&quot;</span>).pack(anchor=<span class="s">&quot;w&quot;</span>)
+        n1 = tk.StringVar(value=saved_n1)
+        ttk.Combobox(
+            frame, textvariable=n1, values=known, width=<span class="n">43</span>
+        ).pack(fill=<span class="s">&quot;x&quot;</span>, pady=(<span class="n">4</span>, <span class="n">6</span>))
+
+        p1 = tk.StringVar()
+        ttk.Entry(frame, textvariable=p1, show=<span class="s">&quot;•&quot;</span>, width=<span class="n">45</span>).pack(
+            fill=<span class="s">&quot;x&quot;</span>, pady=(<span class="n">0</span>, <span class="n">4</span>)
+        )
+        ttk.Label(
+            frame,
+            text=<span class="b">self</span>._password_hint(saved_n1),
+            foreground=<span class="s">&quot;#666666&quot;</span>,
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">0</span>, <span class="n">12</span>))
+
+        ttk.Label(frame, text=<span class="s">&quot;Network 2&quot;</span>).pack(anchor=<span class="s">&quot;w&quot;</span>)
+        n2 = tk.StringVar(value=saved_n2)
+        ttk.Combobox(
+            frame, textvariable=n2, values=known, width=<span class="n">43</span>
+        ).pack(fill=<span class="s">&quot;x&quot;</span>, pady=(<span class="n">4</span>, <span class="n">6</span>))
+
+        p2 = tk.StringVar()
+        ttk.Entry(frame, textvariable=p2, show=<span class="s">&quot;•&quot;</span>, width=<span class="n">45</span>).pack(
+            fill=<span class="s">&quot;x&quot;</span>, pady=(<span class="n">0</span>, <span class="n">4</span>)
+        )
+        ttk.Label(
+            frame,
+            text=<span class="b">self</span>._password_hint(saved_n2),
+            foreground=<span class="s">&quot;#666666&quot;</span>,
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">0</span>, <span class="n">12</span>))
+
+        where = (
+            <span class="s">&quot;the macOS keychain&quot;</span> <span class="k">if</span> credentials.backend() == <span class="s">&quot;keychain&quot;</span>
+            <span class="k">else</span> <span class="s">&quot;memory for this run only&quot;</span>
+        )
+        hint = (
+            <span class="s">&quot;Passwords are optional — fill them in only if a switch keeps &quot;</span>
+            f<span class="s">&quot;getting refused. They are kept in {where}, never in the &quot;</span>
+            <span class="s">&quot;configuration file.&quot;</span>
+        )
+        ttk.Label(
+            frame, text=hint, foreground=<span class="s">&quot;#666666&quot;</span>, wraplength=<span class="n">410</span>
+        ).pack(anchor=<span class="s">&quot;w&quot;</span>, pady=(<span class="n">0</span>, <span class="n">16</span>))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill=<span class="s">&quot;x&quot;</span>)
+
+        <span class="k">def</span> <span class="f">save</span>():
+            a = n1.get().strip()
+            b = n2.get().strip()
+            <span class="k">if</span> <span class="k">not</span> a <span class="k">or</span> <span class="k">not</span> b:
+                messagebox.showerror(
+                    <span class="s">&quot;Missing network&quot;</span>,
+                    <span class="s">&quot;Both Network 1 and Network 2 are required.&quot;</span>,
+                    parent=win
+                )
+                <span class="k">return</span>
+            <span class="k">if</span> a == b:
+                messagebox.showerror(
+                    <span class="s">&quot;Duplicate network&quot;</span>,
+                    <span class="s">&quot;Network 1 and Network 2 must be different.&quot;</span>,
+                    parent=win
+                )
+                <span class="k">return</span>
+
+            <span class="b">self</span>.config = {<span class="s">&quot;network1&quot;</span>: a, <span class="s">&quot;network2&quot;</span>: b}
+            save_config(<span class="b">self</span>.config)
+
+            <span class="c"># Blank means &quot;leave whatever is already stored alone&quot;.</span>
+            <span class="k">if</span> p1.get():
+                credentials.set_password(a, p1.get())
+            <span class="k">if</span> p2.get():
+                credentials.set_password(b, p2.get())
+
+            win.destroy()
+            <span class="b">self</span>.refresh_state()
+
+        <span class="k">def</span> <span class="f">reset</span>():
+            <span class="k">if</span> messagebox.askyesno(
+                <span class="s">&quot;Reset configuration&quot;</span>,
+                <span class="s">&quot;Remove the saved Wi-Fi Switch configuration and any stored &quot;</span>
+                <span class="s">&quot;Wi-Fi passwords?&quot;</span>,
+                parent=win
+            ):
+                <span class="k">for</span> ssid <span class="k">in</span> (saved_n1, saved_n2, n1.get().strip(), n2.get().strip()):
+                    credentials.delete_password(ssid)
+                clear_config()
+                <span class="b">self</span>.config = {}
+                win.destroy()
+                <span class="b">self</span>.refresh_state()
+
+        <span class="k">def</span> <span class="f">forget_passwords</span>():
+            <span class="k">for</span> ssid <span class="k">in</span> (saved_n1, saved_n2, n1.get().strip(), n2.get().strip()):
+                credentials.delete_password(ssid)
+            messagebox.showinfo(
+                <span class="s">&quot;Passwords cleared&quot;</span>,
+                <span class="s">&quot;Stored Wi-Fi passwords for these networks were removed.&quot;</span>,
+                parent=win
+            )
+
+        ttk.Button(buttons, text=<span class="s">&quot;Save&quot;</span>, command=save).pack(side=<span class="s">&quot;left&quot;</span>)
+        ttk.Button(
+            buttons, text=<span class="s">&quot;Forget passwords&quot;</span>, command=forget_passwords
+        ).pack(side=<span class="s">&quot;left&quot;</span>, padx=<span class="n">8</span>)
+        ttk.Button(buttons, text=<span class="s">&quot;Reset&quot;</span>, command=reset).pack(side=<span class="s">&quot;right&quot;</span>)
+
+
+<span class="k">def</span> <span class="f">main</span>():
+    root = tk.Tk()
+    <span class="k">try</span>:
+        ttk.Style().theme_use(<span class="s">&quot;clam&quot;</span>)
+    <span class="k">except</span> tk.TclError:
+        <span class="k">pass</span>
+    WifiSwitchApp(root)
+    root.mainloop()
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    main()
+</code></pre></section><section id="wifi-controller-py"><div class="fh"><h2>wifi_controller.py</h2><span>Per-platform Wi-Fi control: scan, join, verify</span><em>316 lines</em></div><pre><code><span class="k">import</span> json
+<span class="k">import</span> platform
+<span class="k">import</span> re
+<span class="k">import</span> shutil
+<span class="k">import</span> subprocess
+<span class="k">import</span> time
+<span class="k">from</span> abc <span class="k">import</span> ABC, abstractmethod
+
+
+<span class="k">class</span> <span class="f">WiFiError</span>(RuntimeError):
+    <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="f">NetworkNotFound</span>(WiFiError):
+    <span class="s">&quot;&quot;&quot;The target SSID is not in range / not visible to the adapter.&quot;&quot;&quot;</span>
+
+
+<span class="k">class</span> <span class="f">JoinRefused</span>(WiFiError):
+    <span class="s">&quot;&quot;&quot;The adapter saw the network but the association was refused.
+
+    On macOS this is the &#x27;-3900 tmpErr&#x27; family: a transient refusal, not a
+    wrong password. Retrying, or supplying the password explicitly, usually
+    clears it.
+    &quot;&quot;&quot;</span>
+
+
+<span class="c"># macOS prints join errors on stdout and still exits 0, so the text is the</span>
+<span class="c"># only reliable signal.</span>
+_NOT_FOUND_MARKERS = (
+    <span class="s">&quot;could not find network&quot;</span>,
+    <span class="s">&quot;network not found&quot;</span>,
+)
+_REFUSED_MARKERS = (
+    <span class="s">&quot;failed to join&quot;</span>,
+    <span class="s">&quot;could not connect&quot;</span>,
+    <span class="s">&quot;error: -&quot;</span>,
+)
+
+
+<span class="k">def</span> <span class="f">_run</span>(command, timeout=<span class="n">20</span>):
+    <span class="k">try</span>:
+        <span class="k">return</span> subprocess.run(
+            command,
+            capture_output=<span class="k">True</span>,
+            text=<span class="k">True</span>,
+            timeout=timeout,
+            encoding=<span class="s">&quot;utf-8&quot;</span>,
+            errors=<span class="s">&quot;replace&quot;</span>,
+        )
+    <span class="k">except</span> FileNotFoundError <span class="k">as</span> exc:
+        <span class="k">raise</span> WiFiError(f<span class="s">&quot;Required system command was not found: {command[0]}&quot;</span>) <span class="k">from</span> exc
+    <span class="k">except</span> subprocess.TimeoutExpired <span class="k">as</span> exc:
+        <span class="k">raise</span> WiFiError(f<span class="s">&quot;System command timed out: {&#x27; &#x27;.join(command)}&quot;</span>) <span class="k">from</span> exc
+
+
+<span class="k">def</span> <span class="f">choose_target</span>(current, network1, network2):
+    <span class="s">&quot;&quot;&quot;Pick the network to switch to, given the SSID we are on right now.&quot;&quot;&quot;</span>
+    <span class="k">if</span> current == network1:
+        <span class="k">return</span> network2
+    <span class="k">if</span> current == network2:
+        <span class="k">return</span> network1
+    <span class="k">return</span> network1
+
+
+<span class="k">def</span> <span class="f">classify_join_output</span>(output):
+    <span class="s">&quot;&quot;&quot;Return an exception for a failed join, or None when the join was accepted.
+
+    `networksetup -setairportnetwork` exits 0 even when it fails, so the
+    command output has to be classified instead of the return code.
+    &quot;&quot;&quot;</span>
+    text = (output <span class="k">or</span> <span class="s">&quot;&quot;</span>).strip()
+    low = text.lower()
+    <span class="k">if</span> <span class="k">not</span> low:
+        <span class="k">return</span> <span class="k">None</span>
+    <span class="k">if</span> any(marker <span class="k">in</span> low <span class="k">for</span> marker <span class="k">in</span> _NOT_FOUND_MARKERS):
+        <span class="k">return</span> NetworkNotFound(text)
+    <span class="k">if</span> any(marker <span class="k">in</span> low <span class="k">for</span> marker <span class="k">in</span> _REFUSED_MARKERS):
+        <span class="k">return</span> JoinRefused(text)
+    <span class="k">return</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">parse_airport_ssid</span>(json_text, interface):
+    <span class="s">&quot;&quot;&quot;Pull the associated SSID for `interface` out of system_profiler JSON.&quot;&quot;&quot;</span>
+    <span class="k">try</span>:
+        data = json.loads(json_text)
+    <span class="k">except</span> (TypeError, ValueError):
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">for</span> entry <span class="k">in</span> data.get(<span class="s">&quot;SPAirPortDataType&quot;</span>, []):
+        <span class="k">for</span> itf <span class="k">in</span> entry.get(<span class="s">&quot;spairport_airport_interfaces&quot;</span>, []):
+            <span class="k">if</span> itf.get(<span class="s">&quot;_name&quot;</span>) != interface:
+                <span class="k">continue</span>
+            current = itf.get(<span class="s">&quot;spairport_current_network_information&quot;</span>) <span class="k">or</span> {}
+            ssid = current.get(<span class="s">&quot;_name&quot;</span>)
+            <span class="k">if</span> <span class="b">isinstance</span>(ssid, <span class="b">str</span>) <span class="k">and</span> ssid.strip():
+                <span class="k">return</span> ssid.strip()
+            <span class="k">return</span> <span class="k">None</span>
+    <span class="k">return</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">parse_preferred_networks</span>(text):
+    <span class="s">&quot;&quot;&quot;Parse `networksetup -listpreferredwirelessnetworks` output.&quot;&quot;&quot;</span>
+    networks = []
+    <span class="k">for</span> line <span class="k">in</span> (text <span class="k">or</span> <span class="s">&quot;&quot;</span>).splitlines():
+        <span class="k">if</span> line.strip().lower().startswith(<span class="s">&quot;preferred networks&quot;</span>):
+            <span class="k">continue</span>
+        ssid = line.strip()
+        <span class="k">if</span> ssid <span class="k">and</span> ssid <span class="k">not</span> <span class="k">in</span> networks:
+            networks.append(ssid)
+    <span class="k">return</span> networks
+
+
+<span class="k">class</span> <span class="f">BaseWiFiController</span>(ABC):
+    <span class="d">@abstractmethod</span>
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        <span class="k">raise</span> NotImplementedError
+
+    <span class="d">@abstractmethod</span>
+    <span class="k">def</span> <span class="f">get_saved_networks</span>(<span class="b">self</span>):
+        <span class="k">raise</span> NotImplementedError
+
+    <span class="d">@abstractmethod</span>
+    <span class="k">def</span> <span class="f">connect</span>(<span class="b">self</span>, network, password=<span class="k">None</span>):
+        <span class="k">raise</span> NotImplementedError
+
+    <span class="k">def</span> <span class="f">is_connected</span>(<span class="b">self</span>, network):
+        <span class="k">return</span> <span class="b">self</span>.get_current_network() == network
+
+
+<span class="k">class</span> <span class="f">WindowsWiFiController</span>(BaseWiFiController):
+    <span class="k">def</span> <span class="f">_check_netsh</span>(<span class="b">self</span>):
+        <span class="k">if</span> <span class="k">not</span> shutil.which(<span class="s">&quot;netsh&quot;</span>):
+            <span class="k">raise</span> WiFiError(<span class="s">&quot;netsh is not available on this Windows installation.&quot;</span>)
+
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        <span class="b">self</span>._check_netsh()
+        result = _run([<span class="s">&quot;netsh&quot;</span>, <span class="s">&quot;wlan&quot;</span>, <span class="s">&quot;show&quot;</span>, <span class="s">&quot;interfaces&quot;</span>])
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">raise</span> WiFiError(result.stderr.strip() <span class="k">or</span> result.stdout.strip())
+
+        <span class="c"># Handles localized Windows output reasonably by looking for the</span>
+        <span class="c"># SSID field while excluding BSSID.</span>
+        <span class="k">for</span> line <span class="k">in</span> result.stdout.splitlines():
+            <span class="k">if</span> re.match(r<span class="s">&quot;^\s*SSID\s*:&quot;</span>, line, re.IGNORECASE):
+                <span class="k">return</span> line.split(<span class="s">&quot;:&quot;</span>, <span class="n">1</span>)[<span class="n">1</span>].strip() <span class="k">or</span> <span class="k">None</span>
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="f">get_saved_networks</span>(<span class="b">self</span>):
+        <span class="b">self</span>._check_netsh()
+        result = _run([<span class="s">&quot;netsh&quot;</span>, <span class="s">&quot;wlan&quot;</span>, <span class="s">&quot;show&quot;</span>, <span class="s">&quot;profiles&quot;</span>])
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">raise</span> WiFiError(result.stderr.strip() <span class="k">or</span> result.stdout.strip())
+
+        profiles = []
+        <span class="k">for</span> line <span class="k">in</span> result.stdout.splitlines():
+            match = re.search(r<span class="s">&quot;:\s*(.+?)\s*$&quot;</span>, line)
+            <span class="k">if</span> match <span class="k">and</span> (<span class="s">&quot;All User Profile&quot;</span> <span class="k">in</span> line <span class="k">or</span> <span class="s">&quot;User Profile&quot;</span> <span class="k">in</span> line):
+                profiles.append(match.group(<span class="n">1</span>).strip())
+        <span class="k">return</span> profiles
+
+    <span class="k">def</span> <span class="f">connect</span>(<span class="b">self</span>, network, password=<span class="k">None</span>):
+        <span class="b">self</span>._check_netsh()
+        <span class="k">if</span> <span class="b">self</span>.is_connected(network):
+            <span class="k">return</span>
+        result = _run([<span class="s">&quot;netsh&quot;</span>, <span class="s">&quot;wlan&quot;</span>, <span class="s">&quot;connect&quot;</span>, f<span class="s">&quot;name={network}&quot;</span>], timeout=<span class="n">20</span>)
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            msg = result.stderr.strip() <span class="k">or</span> result.stdout.strip()
+            <span class="k">raise</span> WiFiError(msg <span class="k">or</span> f<span class="s">&quot;Windows could not connect to &#x27;{network}&#x27;.&quot;</span>)
+
+
+<span class="k">class</span> <span class="f">MacOSWiFiController</span>(BaseWiFiController):
+    JOIN_ATTEMPTS = <span class="n">3</span>
+    RETRY_DELAY = <span class="n">2.0</span>
+
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="b">self</span>):
+        <span class="b">self</span>._cached_interface = <span class="k">None</span>
+
+    <span class="k">def</span> <span class="f">_interface</span>(<span class="b">self</span>):
+        <span class="k">if</span> <span class="b">self</span>._cached_interface:
+            <span class="k">return</span> <span class="b">self</span>._cached_interface
+
+        result = _run([<span class="s">&quot;networksetup&quot;</span>, <span class="s">&quot;-listallhardwareports&quot;</span>])
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">raise</span> WiFiError(result.stderr.strip() <span class="k">or</span> result.stdout.strip())
+
+        lines = result.stdout.splitlines()
+        <span class="k">for</span> i, line <span class="k">in</span> <span class="b">enumerate</span>(lines):
+            <span class="k">if</span> line.strip() == <span class="s">&quot;Hardware Port: Wi-Fi&quot;</span> <span class="k">and</span> i + <span class="n">1</span> &lt; <span class="b">len</span>(lines):
+                m = re.search(r<span class="s">&quot;Device:\s*(\S+)&quot;</span>, lines[i + <span class="n">1</span>])
+                <span class="k">if</span> m:
+                    <span class="b">self</span>._cached_interface = m.group(<span class="n">1</span>)
+                    <span class="k">return</span> <span class="b">self</span>._cached_interface
+
+        <span class="c"># Common fallback; still verify networksetup exists at all.</span>
+        <span class="k">if</span> shutil.which(<span class="s">&quot;networksetup&quot;</span>):
+            <span class="b">self</span>._cached_interface = <span class="s">&quot;en0&quot;</span>
+            <span class="k">return</span> <span class="b">self</span>._cached_interface
+
+        <span class="k">raise</span> WiFiError(<span class="s">&quot;Could not find the macOS Wi-Fi interface.&quot;</span>)
+
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        interface = <span class="b">self</span>._interface()
+
+        <span class="c"># system_profiler is the only source that stays accurate on recent</span>
+        <span class="c"># macOS. `networksetup -getairportnetwork` reports &quot;You are not</span>
+        <span class="c"># associated with an AirPort network&quot; even while connected, which</span>
+        <span class="c"># would make the app think it is offline and re-join the network it</span>
+        <span class="c"># is already on. It is kept only as a fallback.</span>
+        ssid = <span class="b">self</span>._ssid_from_system_profiler(interface)
+        <span class="k">if</span> ssid:
+            <span class="k">return</span> ssid
+        <span class="k">return</span> <span class="b">self</span>._ssid_from_networksetup(interface)
+
+    <span class="k">def</span> <span class="f">_ssid_from_system_profiler</span>(<span class="b">self</span>, interface):
+        <span class="c"># A full scan takes a few seconds; -detailLevel mini omits the SSID.</span>
+        result = _run([<span class="s">&quot;system_profiler&quot;</span>, <span class="s">&quot;-json&quot;</span>, <span class="s">&quot;SPAirPortDataType&quot;</span>], timeout=<span class="n">40</span>)
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">return</span> <span class="k">None</span>
+        <span class="k">return</span> parse_airport_ssid(result.stdout, interface)
+
+    <span class="k">def</span> <span class="f">_ssid_from_networksetup</span>(<span class="b">self</span>, interface):
+        result = _run([<span class="s">&quot;networksetup&quot;</span>, <span class="s">&quot;-getairportnetwork&quot;</span>, interface])
+        text = result.stdout.strip()
+        <span class="k">if</span> result.returncode != <span class="n">0</span> <span class="k">and</span> <span class="k">not</span> text:
+            <span class="k">raise</span> WiFiError(result.stderr.strip() <span class="k">or</span> <span class="s">&quot;Wi-Fi status is unavailable.&quot;</span>)
+
+        <span class="k">if</span> text.lower().startswith(<span class="s">&quot;you are not associated&quot;</span>):
+            <span class="k">return</span> <span class="k">None</span>
+        match = re.search(r<span class="s">&quot;:\s*(.+)$&quot;</span>, text)
+        <span class="k">if</span> <span class="k">not</span> match:
+            <span class="k">return</span> <span class="k">None</span>
+        <span class="k">return</span> match.group(<span class="n">1</span>).strip() <span class="k">or</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="f">get_saved_networks</span>(<span class="b">self</span>):
+        interface = <span class="b">self</span>._interface()
+        result = _run(
+            [<span class="s">&quot;networksetup&quot;</span>, <span class="s">&quot;-listpreferredwirelessnetworks&quot;</span>, interface]
+        )
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">return</span> []
+        <span class="k">return</span> parse_preferred_networks(result.stdout)
+
+    <span class="k">def</span> <span class="f">set_power</span>(<span class="b">self</span>, on):
+        interface = <span class="b">self</span>._interface()
+        _run([<span class="s">&quot;networksetup&quot;</span>, <span class="s">&quot;-setairportpower&quot;</span>, interface, <span class="s">&quot;on&quot;</span> <span class="k">if</span> on <span class="k">else</span> <span class="s">&quot;off&quot;</span>])
+
+    <span class="k">def</span> <span class="f">connect</span>(<span class="b">self</span>, network, password=<span class="k">None</span>):
+        interface = <span class="b">self</span>._interface()
+
+        <span class="c"># Re-joining the SSID you are already associated with is what produces</span>
+        <span class="c"># the &quot;-3900 tmpErr&quot; refusal, and it drops the connection for nothing.</span>
+        <span class="k">if</span> <span class="b">self</span>.get_current_network() == network:
+            <span class="k">return</span>
+
+        command = [<span class="s">&quot;networksetup&quot;</span>, <span class="s">&quot;-setairportnetwork&quot;</span>, interface, network]
+        <span class="k">if</span> password:
+            command.append(password)
+
+        last_error = <span class="k">None</span>
+        <span class="k">for</span> attempt <span class="k">in</span> <span class="b">range</span>(<span class="n">1</span>, <span class="b">self</span>.JOIN_ATTEMPTS + <span class="n">1</span>):
+            result = _run(command, timeout=<span class="n">30</span>)
+            output = f<span class="s">&quot;{result.stdout}\n{result.stderr}&quot;</span>.strip()
+            error = classify_join_output(output)
+
+            <span class="k">if</span> error <span class="k">is</span> <span class="k">None</span> <span class="k">and</span> result.returncode != <span class="n">0</span>:
+                error = WiFiError(
+                    output <span class="k">or</span> f<span class="s">&quot;macOS could not connect to &#x27;{network}&#x27;.&quot;</span>
+                )
+            <span class="k">if</span> error <span class="k">is</span> <span class="k">None</span>:
+                <span class="k">return</span>
+
+            last_error = error
+            <span class="k">if</span> <span class="b">isinstance</span>(error, NetworkNotFound):
+                <span class="k">raise</span> NetworkNotFound(
+                    f<span class="s">&quot;&#x27;{network}&#x27; is not in range right now.&quot;</span>
+                )
+
+            <span class="c"># macOS reports &quot;Failed to join&quot; / -3900 on joins that do land,</span>
+            <span class="c"># because it answers before the association settles. Retrying</span>
+            <span class="c"># blindly would re-join a network we are now on, which tears the</span>
+            <span class="c"># fresh connection back down — so always confirm first.</span>
+            time.sleep(<span class="b">self</span>.RETRY_DELAY)
+            <span class="k">if</span> <span class="b">self</span>.get_current_network() == network:
+                <span class="k">return</span>
+
+        <span class="k">raise</span> JoinRefused(
+            f<span class="s">&quot;macOS refused the join to &#x27;{network}&#x27; &quot;</span>
+            f<span class="s">&quot;({self.JOIN_ATTEMPTS} attempts): {last_error}&quot;</span>
+        )
+
+
+<span class="k">class</span> <span class="f">UnsupportedWiFiController</span>(BaseWiFiController):
+    <span class="k">def</span> <span class="f">_error</span>(<span class="b">self</span>):
+        <span class="k">raise</span> WiFiError(
+            f<span class="s">&quot;Unsupported operating system: {platform.system()}. &quot;</span>
+            <span class="s">&quot;This prototype supports Windows and macOS.&quot;</span>
+        )
+
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        <span class="b">self</span>._error()
+
+    <span class="k">def</span> <span class="f">get_saved_networks</span>(<span class="b">self</span>):
+        <span class="b">self</span>._error()
+
+    <span class="k">def</span> <span class="f">connect</span>(<span class="b">self</span>, network, password=<span class="k">None</span>):
+        <span class="b">self</span>._error()
+
+
+<span class="k">def</span> <span class="f">create_wifi_controller</span>():
+    system = platform.system()
+    <span class="k">if</span> system == <span class="s">&quot;Windows&quot;</span>:
+        <span class="k">return</span> WindowsWiFiController()
+    <span class="k">if</span> system == <span class="s">&quot;Darwin&quot;</span>:
+        <span class="k">return</span> MacOSWiFiController()
+    <span class="k">return</span> UnsupportedWiFiController()
+</code></pre></section><section id="credentials-py"><div class="fh"><h2>credentials.py</h2><span>Passwords via the macOS keychain, never on disk</span><em>85 lines</em></div><pre><code><span class="s">&quot;&quot;&quot;Optional Wi-Fi passwords, supplied before a switch instead of mid-switch.
+
+Passwords never go into the JSON configuration. On macOS they live in the
+login keychain; elsewhere they are kept in memory for the current run only
+(Windows joins saved profiles and does not take a password at all).
+&quot;&quot;&quot;</span>
+
+<span class="k">import</span> platform
+<span class="k">import</span> shutil
+<span class="k">import</span> subprocess
+
+SERVICE = <span class="s">&quot;wifi-switch&quot;</span>
+
+_MEMORY_STORE = {}
+
+
+<span class="k">def</span> <span class="f">_is_macos</span>():
+    <span class="k">return</span> platform.system() == <span class="s">&quot;Darwin&quot;</span> <span class="k">and</span> shutil.which(<span class="s">&quot;security&quot;</span>) <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">backend</span>():
+    <span class="k">return</span> <span class="s">&quot;keychain&quot;</span> <span class="k">if</span> _is_macos() <span class="k">else</span> <span class="s">&quot;memory&quot;</span>
+
+
+<span class="k">def</span> <span class="f">_security</span>(args, timeout=<span class="n">15</span>):
+    <span class="k">return</span> subprocess.run(
+        [<span class="s">&quot;security&quot;</span>] + args,
+        capture_output=<span class="k">True</span>,
+        text=<span class="k">True</span>,
+        timeout=timeout,
+        encoding=<span class="s">&quot;utf-8&quot;</span>,
+        errors=<span class="s">&quot;replace&quot;</span>,
+    )
+
+
+<span class="k">def</span> <span class="f">set_password</span>(ssid, password):
+    <span class="s">&quot;&quot;&quot;Store (or clear, when password is falsy) the password for `ssid`.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="k">not</span> ssid:
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="k">not</span> password:
+        delete_password(ssid)
+        <span class="k">return</span>
+
+    <span class="k">if</span> _is_macos():
+        <span class="c"># -U updates an existing item; -T lets `security` read it back without</span>
+        <span class="c"># a keychain access prompt on every switch.</span>
+        _security([
+            <span class="s">&quot;add-generic-password&quot;</span>,
+            <span class="s">&quot;-U&quot;</span>,
+            <span class="s">&quot;-s&quot;</span>, SERVICE,
+            <span class="s">&quot;-a&quot;</span>, ssid,
+            <span class="s">&quot;-w&quot;</span>, password,
+            <span class="s">&quot;-T&quot;</span>, <span class="s">&quot;/usr/bin/security&quot;</span>,
+        ])
+    <span class="k">else</span>:
+        _MEMORY_STORE[ssid] = password
+
+
+<span class="k">def</span> <span class="f">get_password</span>(ssid):
+    <span class="k">if</span> <span class="k">not</span> ssid:
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">if</span> _is_macos():
+        result = _security([
+            <span class="s">&quot;find-generic-password&quot;</span>, <span class="s">&quot;-s&quot;</span>, SERVICE, <span class="s">&quot;-a&quot;</span>, ssid, <span class="s">&quot;-w&quot;</span>
+        ])
+        <span class="k">if</span> result.returncode != <span class="n">0</span>:
+            <span class="k">return</span> <span class="k">None</span>
+        <span class="k">return</span> result.stdout.rstrip(<span class="s">&quot;\n&quot;</span>) <span class="k">or</span> <span class="k">None</span>
+
+    <span class="k">return</span> _MEMORY_STORE.get(ssid)
+
+
+<span class="k">def</span> <span class="f">has_password</span>(ssid):
+    <span class="k">return</span> get_password(ssid) <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">delete_password</span>(ssid):
+    <span class="k">if</span> <span class="k">not</span> ssid:
+        <span class="k">return</span>
+    <span class="k">if</span> _is_macos():
+        _security([<span class="s">&quot;delete-generic-password&quot;</span>, <span class="s">&quot;-s&quot;</span>, SERVICE, <span class="s">&quot;-a&quot;</span>, ssid])
+    <span class="k">else</span>:
+        _MEMORY_STORE.pop(ssid, <span class="k">None</span>)
+</code></pre></section><section id="config-py"><div class="fh"><h2>config.py</h2><span>Where the saved configuration lives</span><em>48 lines</em></div><pre><code><span class="k">import</span> json
+<span class="k">import</span> os
+<span class="k">from</span> pathlib <span class="k">import</span> Path
+
+
+<span class="k">def</span> <span class="f">config_path</span>() -&gt; Path:
+    <span class="k">if</span> os.name == <span class="s">&quot;nt&quot;</span>:
+        base = Path(os.environ.get(<span class="s">&quot;APPDATA&quot;</span>, Path.home()))
+    <span class="k">else</span>:
+        base = Path(os.environ.get(<span class="s">&quot;XDG_CONFIG_HOME&quot;</span>, Path.home() / <span class="s">&quot;.config&quot;</span>))
+    <span class="k">return</span> base / <span class="s">&quot;wifi-switch&quot;</span> / <span class="s">&quot;config.json&quot;</span>
+
+
+<span class="k">def</span> <span class="f">load_config</span>() -&gt; <span class="b">dict</span>:
+    path = config_path()
+    <span class="k">if</span> <span class="k">not</span> path.exists():
+        <span class="k">return</span> {}
+    <span class="k">try</span>:
+        <span class="k">with</span> path.<span class="b">open</span>(<span class="s">&quot;r&quot;</span>, encoding=<span class="s">&quot;utf-8&quot;</span>) <span class="k">as</span> f:
+            data = json.load(f)
+        <span class="k">if</span> <span class="k">not</span> <span class="b">isinstance</span>(data, <span class="b">dict</span>):
+            <span class="k">return</span> {}
+        <span class="k">return</span> data
+    <span class="k">except</span> (OSError, json.JSONDecodeError):
+        <span class="k">return</span> {}
+
+
+<span class="k">def</span> <span class="f">save_config</span>(data: <span class="b">dict</span>) -&gt; <span class="k">None</span>:
+    path = config_path()
+    path.parent.mkdir(parents=<span class="k">True</span>, exist_ok=<span class="k">True</span>)
+    <span class="k">with</span> path.<span class="b">open</span>(<span class="s">&quot;w&quot;</span>, encoding=<span class="s">&quot;utf-8&quot;</span>) <span class="k">as</span> f:
+        json.dump(
+            {
+                <span class="s">&quot;network1&quot;</span>: data.get(<span class="s">&quot;network1&quot;</span>, <span class="s">&quot;&quot;</span>),
+                <span class="s">&quot;network2&quot;</span>: data.get(<span class="s">&quot;network2&quot;</span>, <span class="s">&quot;&quot;</span>),
+            },
+            f,
+            indent=<span class="n">2</span>,
+        )
+
+
+<span class="k">def</span> <span class="f">clear_config</span>() -&gt; <span class="k">None</span>:
+    path = config_path()
+    <span class="k">try</span>:
+        path.unlink()
+    <span class="k">except</span> FileNotFoundError:
+        <span class="k">pass</span>
+</code></pre></section><section id="tests-test-wifi-logic-py"><div class="fh"><h2>tests/test_wifi_logic.py</h2><span>Unit tests for the switching logic</span><em>211 lines</em></div><pre><code><span class="k">import</span> json
+<span class="k">import</span> os
+<span class="k">import</span> sys
+
+<span class="k">import</span> pytest
+
+sys.path.insert(<span class="n">0</span>, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+<span class="k">import</span> credentials  <span class="c"># noqa: E402</span>
+<span class="k">import</span> wifi_controller  <span class="c"># noqa: E402</span>
+<span class="k">from</span> wifi_controller <span class="k">import</span> (  <span class="c"># noqa: E402</span>
+    JoinRefused,
+    NetworkNotFound,
+    choose_target,
+    classify_join_output,
+    parse_airport_ssid,
+    parse_preferred_networks,
+)
+
+
+<span class="k">class</span> <span class="f">FakeController</span>:
+    <span class="s">&quot;&quot;&quot;Stands in for a real adapter; never touches the system.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="b">self</span>, current):
+        <span class="b">self</span>.current = current
+        <span class="b">self</span>.joins = []
+
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        <span class="k">return</span> <span class="b">self</span>.current
+
+    <span class="k">def</span> <span class="f">connect</span>(<span class="b">self</span>, network, password=<span class="k">None</span>):
+        <span class="k">if</span> <span class="b">self</span>.current == network:
+            <span class="c"># Mirrors the real controllers: never re-join the active network.</span>
+            <span class="k">return</span>
+        <span class="b">self</span>.joins.append(network)
+        <span class="b">self</span>.current = network
+
+
+<span class="k">def</span> <span class="f">test_switch_from_network1</span>():
+    <span class="k">assert</span> choose_target(<span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>) == <span class="s">&quot;Office&quot;</span>
+
+
+<span class="k">def</span> <span class="f">test_switch_from_network2</span>():
+    <span class="k">assert</span> choose_target(<span class="s">&quot;Office&quot;</span>, <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>) == <span class="s">&quot;Home&quot;</span>
+
+
+<span class="k">def</span> <span class="f">test_unknown_network_defaults_to_network1</span>():
+    <span class="k">assert</span> choose_target(<span class="s">&quot;Coffee Shop&quot;</span>, <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>) == <span class="s">&quot;Home&quot;</span>
+
+
+<span class="k">def</span> <span class="f">test_undetected_network_defaults_to_network1</span>():
+    <span class="k">assert</span> choose_target(<span class="k">None</span>, <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>) == <span class="s">&quot;Home&quot;</span>
+
+
+<span class="k">def</span> <span class="f">test_fake_connection</span>():
+    controller = FakeController(<span class="s">&quot;Home&quot;</span>)
+    target = choose_target(controller.get_current_network(), <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>)
+    controller.connect(target)
+
+    <span class="k">assert</span> controller.get_current_network() == <span class="s">&quot;Office&quot;</span>
+    <span class="k">assert</span> controller.joins == [<span class="s">&quot;Office&quot;</span>]
+
+
+<span class="k">def</span> <span class="f">test_never_rejoins_the_active_network</span>():
+    controller = FakeController(<span class="s">&quot;Home&quot;</span>)
+    controller.connect(<span class="s">&quot;Home&quot;</span>)
+
+    <span class="k">assert</span> controller.joins == []
+    <span class="k">assert</span> controller.get_current_network() == <span class="s">&quot;Home&quot;</span>
+
+
+<span class="c"># --- macOS output parsing -------------------------------------------------</span>
+
+SP_JSON = json.dumps({
+    <span class="s">&quot;SPAirPortDataType&quot;</span>: [{
+        <span class="s">&quot;spairport_airport_interfaces&quot;</span>: [
+            {
+                <span class="s">&quot;_name&quot;</span>: <span class="s">&quot;en0&quot;</span>,
+                <span class="s">&quot;spairport_current_network_information&quot;</span>: {
+                    <span class="s">&quot;_name&quot;</span>: <span class="s">&quot;az&quot;</span>,
+                    <span class="s">&quot;spairport_network_channel&quot;</span>: <span class="s">&quot;6 (2GHz, 20MHz)&quot;</span>,
+                },
+            },
+            {<span class="s">&quot;_name&quot;</span>: <span class="s">&quot;awdl0&quot;</span>},
+        ]
+    }]
+})
+
+
+<span class="k">def</span> <span class="f">test_parse_airport_ssid</span>():
+    <span class="k">assert</span> parse_airport_ssid(SP_JSON, <span class="s">&quot;en0&quot;</span>) == <span class="s">&quot;az&quot;</span>
+
+
+<span class="k">def</span> <span class="f">test_parse_airport_ssid_when_not_associated</span>():
+    payload = json.dumps({
+        <span class="s">&quot;SPAirPortDataType&quot;</span>: [{
+            <span class="s">&quot;spairport_airport_interfaces&quot;</span>: [{<span class="s">&quot;_name&quot;</span>: <span class="s">&quot;en0&quot;</span>}]
+        }]
+    })
+    <span class="k">assert</span> parse_airport_ssid(payload, <span class="s">&quot;en0&quot;</span>) <span class="k">is</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">test_parse_airport_ssid_with_garbage_input</span>():
+    <span class="k">assert</span> parse_airport_ssid(<span class="s">&quot;not json&quot;</span>, <span class="s">&quot;en0&quot;</span>) <span class="k">is</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">test_parse_preferred_networks</span>():
+    text = <span class="s">&quot;Preferred networks on en0:\n\taz\n\taz-5G\n\tTP-Link_9BD8\n&quot;</span>
+    <span class="k">assert</span> parse_preferred_networks(text) == [<span class="s">&quot;az&quot;</span>, <span class="s">&quot;az-5G&quot;</span>, <span class="s">&quot;TP-Link_9BD8&quot;</span>]
+
+
+<span class="k">def</span> <span class="f">test_successful_join_produces_no_error</span>():
+    <span class="k">assert</span> classify_join_output(<span class="s">&quot;&quot;</span>) <span class="k">is</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">test_join_refusal_is_detected_despite_exit_code_zero</span>():
+    output = (
+        <span class="s">&quot;Failed to join network az.\n&quot;</span>
+        <span class="s">&quot;Error: -3900 The operation couldn&#x27;t be completed. tmpErr&quot;</span>
+    )
+    <span class="k">assert</span> <span class="b">isinstance</span>(classify_join_output(output), JoinRefused)
+
+
+<span class="k">def</span> <span class="f">test_missing_network_is_detected</span>():
+    output = <span class="s">&quot;Could not find network Office.&quot;</span>
+    <span class="k">assert</span> <span class="b">isinstance</span>(classify_join_output(output), NetworkNotFound)
+
+
+<span class="c"># --- join retry behaviour -------------------------------------------------</span>
+
+<span class="k">class</span> <span class="f">_StubbedMac</span>(wifi_controller.MacOSWiFiController):
+    <span class="s">&quot;&quot;&quot;MacOSWiFiController with the two system calls replaced.&quot;&quot;&quot;</span>
+
+    RETRY_DELAY = <span class="n">0</span>
+
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="b">self</span>, ssid_sequence, join_outputs):
+        <span class="b">super</span>().__init__()
+        <span class="b">self</span>._cached_interface = <span class="s">&quot;en0&quot;</span>
+        <span class="b">self</span>.ssid_sequence = <span class="b">list</span>(ssid_sequence)
+        <span class="b">self</span>.join_outputs = <span class="b">list</span>(join_outputs)
+        <span class="b">self</span>.joins = <span class="n">0</span>
+
+    <span class="k">def</span> <span class="f">get_current_network</span>(<span class="b">self</span>):
+        <span class="k">if</span> <span class="b">len</span>(<span class="b">self</span>.ssid_sequence) &gt; <span class="n">1</span>:
+            <span class="k">return</span> <span class="b">self</span>.ssid_sequence.pop(<span class="n">0</span>)
+        <span class="k">return</span> <span class="b">self</span>.ssid_sequence[<span class="n">0</span>]
+
+    <span class="k">def</span> <span class="f">_join</span>(<span class="b">self</span>, command):
+        <span class="b">self</span>.joins += <span class="n">1</span>
+        <span class="k">return</span> <span class="b">self</span>.join_outputs.pop(<span class="n">0</span>) <span class="k">if</span> <span class="b">self</span>.join_outputs <span class="k">else</span> <span class="s">&quot;&quot;</span>
+
+
+<span class="k">def</span> <span class="f">_patch_run</span>(monkeypatch, controller):
+    <span class="k">def</span> <span class="f">fake_run</span>(command, timeout=<span class="n">20</span>):
+        <span class="k">class</span> <span class="f">R</span>:
+            returncode = <span class="n">0</span>
+            stdout = controller._join(command)
+            stderr = <span class="s">&quot;&quot;</span>
+        <span class="k">return</span> R()
+    monkeypatch.setattr(wifi_controller, <span class="s">&quot;_run&quot;</span>, fake_run)
+
+
+<span class="k">def</span> <span class="f">test_join_that_reports_failure_but_actually_connected_is_not_retried</span>(monkeypatch):
+    <span class="c"># macOS prints &quot;Failed to join&quot; on a join that lands; the old code retried,</span>
+    <span class="c"># and the retry re-joined the now-active network, tearing it back down.</span>
+    c = _StubbedMac([<span class="s">&quot;Home&quot;</span>, <span class="s">&quot;Office&quot;</span>], [<span class="s">&quot;Failed to join network Office.\nError: -3900&quot;</span>])
+    _patch_run(monkeypatch, c)
+
+    c.connect(<span class="s">&quot;Office&quot;</span>)
+
+    <span class="k">assert</span> c.joins == <span class="n">1</span>
+
+
+<span class="k">def</span> <span class="f">test_genuine_refusal_still_raises</span>(monkeypatch):
+    c = _StubbedMac([<span class="s">&quot;Home&quot;</span>], [<span class="s">&quot;Failed to join network Office.\nError: -3900&quot;</span>] * <span class="n">3</span>)
+    _patch_run(monkeypatch, c)
+
+    <span class="k">with</span> pytest.raises(JoinRefused):
+        c.connect(<span class="s">&quot;Office&quot;</span>)
+
+    <span class="k">assert</span> c.joins == <span class="n">3</span>
+
+
+<span class="k">def</span> <span class="f">test_join_is_skipped_when_already_on_the_target</span>(monkeypatch):
+    c = _StubbedMac([<span class="s">&quot;Office&quot;</span>], [])
+    _patch_run(monkeypatch, c)
+
+    c.connect(<span class="s">&quot;Office&quot;</span>)
+
+    <span class="k">assert</span> c.joins == <span class="n">0</span>
+
+
+<span class="c"># --- credential storage ---------------------------------------------------</span>
+
+<span class="k">def</span> <span class="f">test_password_roundtrip_and_delete</span>():
+    ssid = <span class="s">&quot;wifi-switch-unit-test&quot;</span>
+    credentials.set_password(ssid, <span class="s">&quot;s3cret&quot;</span>)
+    <span class="k">try</span>:
+        <span class="k">assert</span> credentials.get_password(ssid) == <span class="s">&quot;s3cret&quot;</span>
+        <span class="k">assert</span> credentials.has_password(ssid)
+    <span class="k">finally</span>:
+        credentials.delete_password(ssid)
+    <span class="k">assert</span> credentials.get_password(ssid) <span class="k">is</span> <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="f">test_blank_password_clears_the_entry</span>():
+    ssid = <span class="s">&quot;wifi-switch-unit-test-2&quot;</span>
+    credentials.set_password(ssid, <span class="s">&quot;s3cret&quot;</span>)
+    credentials.set_password(ssid, <span class="s">&quot;&quot;</span>)
+    <span class="k">assert</span> credentials.get_password(ssid) <span class="k">is</span> <span class="k">None</span>
+</code></pre></section><section id="tests-test-config-py"><div class="fh"><h2>tests/test_config.py</h2><span>Unit tests for configuration handling</span><em>30 lines</em></div><pre><code><span class="k">import</span> json
+<span class="k">from</span> pathlib <span class="k">import</span> Path
+
+<span class="k">import</span> config
+
+
+<span class="k">def</span> <span class="f">test_save_and_load</span>(tmp_path, monkeypatch):
+    target = tmp_path / <span class="s">&quot;config.json&quot;</span>
+    monkeypatch.setattr(config, <span class="s">&quot;config_path&quot;</span>, <span class="k">lambda</span>: target)
+
+    config.save_config({<span class="s">&quot;network1&quot;</span>: <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;network2&quot;</span>: <span class="s">&quot;Office&quot;</span>})
+    <span class="k">assert</span> config.load_config() == {<span class="s">&quot;network1&quot;</span>: <span class="s">&quot;Home&quot;</span>, <span class="s">&quot;network2&quot;</span>: <span class="s">&quot;Office&quot;</span>}
+
+
+<span class="k">def</span> <span class="f">test_missing_config</span>(tmp_path, monkeypatch):
+    target = tmp_path / <span class="s">&quot;missing.json&quot;</span>
+    monkeypatch.setattr(config, <span class="s">&quot;config_path&quot;</span>, <span class="k">lambda</span>: target)
+    <span class="k">assert</span> config.load_config() == {}
+
+
+<span class="k">def</span> <span class="f">test_clear_config</span>(tmp_path, monkeypatch):
+    target = tmp_path / <span class="s">&quot;config.json&quot;</span>
+    monkeypatch.setattr(config, <span class="s">&quot;config_path&quot;</span>, <span class="k">lambda</span>: target)
+
+    config.save_config({<span class="s">&quot;network1&quot;</span>: <span class="s">&quot;A&quot;</span>, <span class="s">&quot;network2&quot;</span>: <span class="s">&quot;B&quot;</span>})
+    <span class="k">assert</span> target.exists()
+
+    config.clear_config()
+    <span class="k">assert</span> <span class="k">not</span> target.exists()
+</code></pre></section><section id="requirements-txt"><div class="fh"><h2>requirements.txt</h2><span>Dependencies</span><em>4 lines</em></div><pre><code># No third-party runtime dependencies.
+# Python&#x27;s standard library (including Tkinter) is used.
+pytest&gt;=8.0
+</code></pre></section>
+
+<footer>Generated by scripts/build_wifi_viewer.py from the working sources.
+The same files are committed under extras/wifi-switch/ in this repository.</footer>
+</div>
+</body>
+</html>

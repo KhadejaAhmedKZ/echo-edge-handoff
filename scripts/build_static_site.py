@@ -236,6 +236,14 @@ def main() -> None:
 
 
 def write_site() -> None:
+    # Refresh the Wi-Fi switch source viewer first: it writes into
+    # dashboard/assets, which is copied wholesale just below.
+    try:
+        import build_wifi_viewer
+        build_wifi_viewer.main()
+    except SystemExit as exc:
+        print(f"  (skipping the Wi-Fi switch viewer: {exc})")
+
     # Assets are copied verbatim, except that the two absolute /assets/ URLs
     # inside mission.js have to be relative to survive a project Pages path.
     dst_assets = os.path.join(DOCS, "assets")
