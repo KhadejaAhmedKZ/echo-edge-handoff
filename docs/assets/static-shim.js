@@ -159,6 +159,40 @@
     });
   };
 
+  /* ---- download links ------------------------------------------------
+   * The runs table links downloads as <a href="/api/runs/.../export">. That
+   * is a navigation, not a fetch, so the override above never sees it and on
+   * a project Pages path it would resolve to the domain root. Catch the click
+   * and hand over the captured file instead.
+   */
+
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.hasAttribute("download") === false && a.target === "_blank") { /* fall through */ }
+    if (!a) return;
+    var path = normalise(a.getAttribute("href") || "");
+    if (path === null) return;
+    e.preventDefault();
+    manifest().then(function () {
+      var rel = M.index[path];
+      if (!rel) {
+        alert("That file was not carried into this static build.");
+        return;
+      }
+      realFetch(BASE + rel).then(function (r) { return r.blob(); }).then(function (b) {
+        var url = URL.createObjectURL(b);
+        var link = document.createElement("a");
+        var name = path.replace(/^\/api\/runs\//, "").replace(/\//g, "-");
+        link.href = url;
+        link.download = name + (/export|recording/.test(path) ? ".jsonl" : ".json");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+      }).catch(function () { alert("Could not read that file from the static build."); });
+    });
+  }, true);
+
   /* ---- WebSocket ---------------------------------------------------- */
 
   var RealWS = window.WebSocket;

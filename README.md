@@ -4,6 +4,17 @@
 network and processing server, preparing the target, and transferring session
 progress before switching.**
 
+**Live, nothing to install:** [open the mission dashboard](https://khadejaahmedkz.github.io/echo-edge-handoff/)
+· [Wi-Fi switch prototype source](https://khadejaahmedkz.github.io/echo-edge-handoff/assets/wifi-switch.html)
+
+The published page replays recorded runs: GitHub Pages serves files and cannot
+run this Python backend, so "Run live experiment" there plays back a real
+recorded mission at its original pace rather than computing a new one. It
+carries the 20 runs and 5 four-controller comparisons in full - every row it
+lists can be replayed, scrubbed and downloaded. The rest of the recorded
+evidence stays in `experiments/`. To compute a run for real, use `./start.sh`
+below.
+
 This folder is the submitted prototype: one mission, one dashboard, one engine,
 and the recorded evidence behind every number it shows. The macOS, Linux,
 Wi-Fi-switch, QUIC-spike and satellite projects in `ECHO_Project/` are

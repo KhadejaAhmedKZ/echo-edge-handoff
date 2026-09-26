@@ -55,8 +55,11 @@ STATIC_GETS = [
     "/api/orbit/constellation",
 ]
 MODEL_SAMPLES = 24          # prediction.js walks samples upward, one per click
-LIGHT_PER_RUN = ["", "/summary", "/verify", "/handoffs"]
-HEAVY_PER_RUN = ["/recording", "/frames", "/decisions", "/export"]
+# Exactly what the page asks for per run - checked against index.html. It
+# never requests /frames, /decisions or /handoffs, so carrying them would be
+# twenty-odd megabytes nothing reads.
+LIGHT_PER_RUN = ["", "/summary", "/verify"]
+HEAVY_PER_RUN = ["/recording", "/export"]
 
 
 # --------------------------------------------------------------------------
@@ -168,20 +171,45 @@ def main() -> None:
         for c in comps:
             capture(base, f"/api/comparisons/{c['comparison_id']}", index, stats)
 
-        full, replay = pick_featured(comps)
-        print(f"capturing evidence for {len(runs)} runs "
-              f"({len(full)} in full, {len(replay)} replay-only) ...")
-        for n, r in enumerate(runs, 1):
+        # Every run the published page lists must work when it is clicked, so
+        # the list is narrowed to the runs captured in full rather than left
+        # long with rows that fail. These are the runs the four-controller
+        # comparisons are built from.
+        keep = []
+        for c in comps:
+            if len(c.get("modes", {})) >= 4:
+                for m in c["modes"].values():
+                    if m["run_id"] not in keep:
+                        keep.append(m["run_id"])
+        if not keep:
+            keep = [r["run_id"] for r in runs[:8]]
+
+        kept_runs = [r for r in runs if r["run_id"] in keep]
+        print(f"capturing {len(kept_runs)} runs in full "
+              f"(of {len(runs)} recorded; the rest stay in the repository) ...")
+        for n, r in enumerate(kept_runs, 1):
             rid = r["run_id"]
-            for suffix in LIGHT_PER_RUN:
+            for suffix in LIGHT_PER_RUN + HEAVY_PER_RUN:
                 capture(base, f"/api/runs/{rid}{suffix}", index, stats)
-            if rid in full:
-                for suffix in HEAVY_PER_RUN:
-                    capture(base, f"/api/runs/{rid}{suffix}", index, stats)
-            elif rid in replay:
-                capture(base, f"/api/runs/{rid}/recording", index, stats)
-            if n % 10 == 0:
-                print(f"  {n}/{len(runs)} runs, {stats['bytes']/1e6:.0f} MB so far")
+            if n % 5 == 0:
+                print(f"  {n}/{len(kept_runs)} runs, {stats['bytes']/1e6:.0f} MB so far")
+
+        # Publish only the runs and comparisons that are complete here.
+        with open(os.path.join(API_DIR, slug("/api/runs")), "w") as fh:
+            json.dump({"runs": kept_runs}, fh, separators=(",", ":"))
+        kept_comps = [c for c in comps
+                      if all(m["run_id"] in keep for m in c.get("modes", {}).values())]
+        with open(os.path.join(API_DIR, slug("/api/comparisons")), "w") as fh:
+            json.dump({"comparisons": kept_comps}, fh, separators=(",", ":"))
+        for c in comps:
+            if c not in kept_comps:
+                f = os.path.join(API_DIR, slug(f"/api/comparisons/{c['comparison_id']}"))
+                if os.path.exists(f):
+                    os.remove(f)
+                index.pop(f"/api/comparisons/{c['comparison_id']}", None)
+        print(f"published {len(kept_runs)} runs and {len(kept_comps)} comparisons")
+        full, replay = keep, []
+        runs = kept_runs
 
         # Which recording answers a given "start a run" request. The run list
         # carries scenario and controller flat; the per-run detail nests them
@@ -435,6 +463,40 @@ SHIM = r"""/* Static build shim - GitHub Pages has no backend.
       });
     });
   };
+
+  /* ---- download links ------------------------------------------------
+   * The runs table links downloads as <a href="/api/runs/.../export">. That
+   * is a navigation, not a fetch, so the override above never sees it and on
+   * a project Pages path it would resolve to the domain root. Catch the click
+   * and hand over the captured file instead.
+   */
+
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.hasAttribute("download") === false && a.target === "_blank") { /* fall through */ }
+    if (!a) return;
+    var path = normalise(a.getAttribute("href") || "");
+    if (path === null) return;
+    e.preventDefault();
+    manifest().then(function () {
+      var rel = M.index[path];
+      if (!rel) {
+        alert("That file was not carried into this static build.");
+        return;
+      }
+      realFetch(BASE + rel).then(function (r) { return r.blob(); }).then(function (b) {
+        var url = URL.createObjectURL(b);
+        var link = document.createElement("a");
+        var name = path.replace(/^\/api\/runs\//, "").replace(/\//g, "-");
+        link.href = url;
+        link.download = name + (/export|recording/.test(path) ? ".jsonl" : ".json");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+      }).catch(function () { alert("Could not read that file from the static build."); });
+    });
+  }, true);
 
   /* ---- WebSocket ---------------------------------------------------- */
 
