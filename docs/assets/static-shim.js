@@ -10,13 +10,24 @@
 
   var realFetch = window.fetch.bind(window);
   var BASE = location.pathname.replace(/[^/]*$/, "");
+  // This script is loaded with ?b=<build stamp>. Reusing it on every captured
+  // file means a browser that cached a previous build can never serve its old
+  // recordings against a new manifest.
+  var BUILD = (function () {
+    var sc = document.currentScript;
+    var m = sc && sc.src ? sc.src.match(/[?&]b=([^&]+)/) : null;
+    return m ? m[1] : "";
+  })();
+  function fileUrl(rel) {
+    return BASE + rel + (BUILD ? (rel.indexOf("?") < 0 ? "?b=" : "&b=") + BUILD : "");
+  }
   var M = null, READY = null;
   var liveSockets = [];
   var playing = null;          // {runId, timers, startedAt, mode}
 
   function manifest() {
     if (!READY) {
-      READY = realFetch(BASE + "api/_manifest.json").then(function (r) {
+      READY = realFetch(fileUrl("api/_manifest.json")).then(function (r) {
         if (!r.ok) throw new Error("static manifest missing");
         return r.json();
       }).then(function (m) { M = m; return m; });
@@ -49,7 +60,7 @@
 
   function recordingUrl(runId) {
     var rel = M.index["/api/runs/" + runId + "/recording"];
-    return rel ? BASE + rel : null;
+    return rel ? fileUrl(rel) : null;
   }
 
   function stopReplay() {
@@ -148,7 +159,7 @@
 
       var rel = M.index[path] || M.index[path.split("?")[0]];
       if (!rel) return notCaptured(path);
-      return realFetch(BASE + rel).then(function (r) {
+      return realFetch(fileUrl(rel)).then(function (r) {
         if (!r.ok) return notCaptured(path);
         return r.blob().then(function (b) {
           var type = /\/(recording|export)$/.test(path)
@@ -179,7 +190,7 @@
         alert("That file was not carried into this static build.");
         return;
       }
-      realFetch(BASE + rel).then(function (r) { return r.blob(); }).then(function (b) {
+      realFetch(fileUrl(rel)).then(function (r) { return r.blob(); }).then(function (b) {
         var url = URL.createObjectURL(b);
         var link = document.createElement("a");
         var name = path.replace(/^\/api\/runs\//, "").replace(/\//g, "-");
