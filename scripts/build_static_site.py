@@ -288,6 +288,13 @@ def write_site() -> None:
     html = open(os.path.join(DASHBOARD, "index.html"), encoding="utf-8").read()
     html = html.replace('href="/assets/', 'href="assets/')
     html = html.replace('src="/assets/', 'src="assets/')
+    # The page pins its own assets with fixed queries (mission.js?v=12), so a
+    # rebuilt asset is served from cache until that number changes by hand.
+    # Append the build stamp to every asset reference instead.
+    stamp_early = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+    html = re.sub(r'((?:href|src)="assets/[\w.\-]+\.(?:js|css))(\?v=[\w.]+)?"',
+                  lambda m: m.group(1) + (m.group(2) or "?v=0") + "&b=" + stamp_early + '"',
+                  html)
     # The shim must patch fetch and WebSocket before ANY of the page's own code
     # runs - the inline application script fires its first requests well above
     # the module tags at the bottom - so it goes in as the first thing in head.
